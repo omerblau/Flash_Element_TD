@@ -1,3 +1,4 @@
+//bagel_cfg.h file
 #pragma once
 
 constexpr Bagel Params{
