@@ -1,9 +1,9 @@
 // Copyright (C) 2025 Moshe Sulamy
 
 #pragma once
-#include <cstdlib>
 #include <cstdint>
 #include <cstring>
+#include <algorithm>
 #include <type_traits>
 
 namespace bagel
@@ -93,6 +93,7 @@ namespace bagel
 		void clear() { _size = 0; }
 
 		size_type size() const { return _size; }
+		static constexpr size_type capacity() { return N; }
 		static void ensure(size_type) {}
 	private:
 		T			_arr[N];

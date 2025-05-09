@@ -1,9 +1,9 @@
 #include "Pong.h"
+using namespace pong;
 
-/// doc of main
-int main()
-{
+int main() {
 	Pong p;
-	p.run();
+	if (p.valid())
+		p.run();
 	return 0;
 }
