@@ -1,0 +1,30 @@
+Tower Name,Element(s),Cost,Damage,Range,Attack Rate,levelup unique (not in the table) effects,Special Effects,Target Types,Unlock Requirement(s)
+Arrow 1,None,7,16,100,Very fast,None,None,Ground/Air,Always Available
+Arrow 2,None,13,16,110,Very fast,None,None,Ground/Air,Always Available
+Arrow 3,None,32,6,125,Very fast,None,None,Ground/Air,Always Available
+,,,,,,,,,
+Cannon 1,None,9,9,70,Very fast,None,Splash Damage,Ground,Always Available
+Cannon 2,None,15,24,70,Very fast,None,Splash Damage,Ground,Always Available
+Cannon 3,None,26,50,70,Very fast,Splash Damage increase to 60,Splash Damage,Ground,Always Available
+,,,,,,,,,
+Air 1,None,12,20,120,Very fast,None,None,Air,Always Available
+Air 2,None,20,35,120,Very fast,increased attack speed ,None,Air,Always Available
+Air 3,None,30,56,120,Very fast,increased attack speed (again),None,Air,Always Available
+,,,,,,,,,
+Water 1,Water,50,25,75,Very fast,None,Slows enemies (except IMMUTE),Ground/Air,reaserch water
+Water 2 ,Water,25,30,75,Very fast,adds a SMALL splash to the slow,Slows enemies (except IMMUTE),Ground/Air,reaserch water
+Water 3,Water,25,35,75,Very fast,adds a LARGE splash to the slow,Slows enemies (except IMMUTE),Ground/Air,reaserch water
+Water 4,Water,25,40,75,Very fast,adds a HUGE splash to the slow,Slows enemies (except IMMUTE),Ground/Air,reaserch water
+,,,,,,,,,
+Earth 1,Earth,50,144,100,Very slow,None,None,Ground,reaserch earth
+Earth 2,Earth,75,288,110,Very slow,None,None,Ground,reaserch earth
+Earth 3 ,Earth,100,576,120,Very slow,None,None,Ground,reaserch earth
+Earth 4,Earth,150,1152,130,Very slow,None,None,Ground,reaserch earth
+,,,,,,,,,
+Fire 1,Fire,50,75,100,Fast,None,"Splash Damage, Extra Damage to IMMUNE",Ground/Air,reaserch fire
+Fire 2,Fire,75,175,100,Fast,"Larger Splash , Extra Damage to IMMUNE","Splash Damage, Extra Damage to IMMUNE",Ground/Air,reaserch fire
+Fire 3,Fire,100,300,100,Fast,"Even Larger Splash , Extra Damage to IMMUNE","Splash Damage, Extra Damage to IMMUNE",Ground/Air,reaserch fire
+Fire 4,Fire,150,400,100,Fast,"HUGE Splash , Extra Damage to IMMUNE","Splash Damage, Extra Damage to IMMUNE",Ground/Air,reaserch fire
+,,,,,,,,,
+Rocket 1,All,200,2000,170,Slow,None,None,Ground/Air,reaserch all elements
+Rocket 2,All,190,2000,170,Fast,double the fire rate,None,Ground/Air,reaserch all elements

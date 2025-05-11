@@ -1,9 +1,7 @@
-#include "Pong.h"
+#include "Game.h"
 
-/// doc of main
-int main()
-{
-	Pong p;
-	p.run();
-	return 0;
+int main() {
+    Game g;
+    g.run();
+    return 0;
 }
