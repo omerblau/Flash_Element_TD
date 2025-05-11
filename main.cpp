@@ -1,7 +1,9 @@
-#include "Game.h"
+#include "Pong.h"
+using namespace pong;
 
 int main() {
-    Game g;
-    g.run();
-    return 0;
+	Pong p;
+	if (p.valid())
+		p.run();
+	return 0;
 }

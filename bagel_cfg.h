@@ -2,7 +2,7 @@
 #pragma once
 
 constexpr Bagel Params{
-	.DynamicResize = true
+	.DynamicResize = false
 };
 
 //BAGEL_STORAGE(Position,PackedStorage)
