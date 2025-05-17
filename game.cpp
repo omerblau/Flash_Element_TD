@@ -5,6 +5,12 @@
 
 static constexpr bool DEBUG = true;
 
+std::optional<std::pair<int, int>> hoveredCell;
+int hoveredCellX = -1;
+int hoveredCellY = -1;
+
+
+
 static void drawCircle(SDL_Renderer *ren, const float cx, const float cy, float radius) {
     constexpr int SEGMENTS = 32;
     constexpr float TWO_PI = 2.0f * 3.14159265f;
@@ -217,7 +223,7 @@ void Game::renderFrame(const SDL_FRect &r, const SDL_FRect &mapDst, float angle,
         SDL_FLIP_NONE
     );
 
-    SDL_RenderPresent(ren);
+    //SDL_RenderPresent(ren);
 }
 
 // — The new, slimmed‐down run() —
@@ -234,6 +240,8 @@ void Game::run() {
     SDL_FRect buy_arrow = {620, 350, sprite_buy_arrow.w * TEX_SCALE, sprite_buy_arrow.h * TEX_SCALE};
 
 
+    SDL_FRect SPRITE_HOVER = {316, 25, 52, 32};
+
     constexpr float STEP = 1.0f / FPS;
     float spriteAngle = aimAt(
         TURNS[nextTurn].x,
@@ -241,10 +249,64 @@ void Game::run() {
     );
     // main loop
     for (int i = 0; i < 7000; ++i) {
+
+
+
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            //change this with "quit" when switching to while loop:
+            if (e.type == SDL_EVENT_QUIT){}
+                //quit = true;
+            else if ((e.type == SDL_EVENT_KEY_DOWN) && (e.key.scancode == SDL_SCANCODE_ESCAPE)){}
+                //quit = true;
+
+
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
+                handleMouseMove(e.motion.x, e.motion.y);
+            }
+        }
+
+
+
+
+
         stepPhysics(STEP);
         updateSpriteRect(sheepRect); // positions r so the sprite’s centre = body centre
         spriteAngle = handleWaypoint(spriteAngle); // snaps _body_ centre to the dot
         renderFrame(sheepRect, mapDst, spriteAngle, buy_air, buy_cannon, buy_arrow);
+
+
+        if (hoveredCellX >= 0 && hoveredCellY >= 0) {
+            constexpr int CELL_SIZE = 52;
+            SDL_FRect dst = {
+                PAD_X + hoveredCellX * CELL_SIZE,
+                PAD_Y + hoveredCellY * CELL_SIZE,
+                SPRITE_HOVER.w * TEX_SCALE,
+                SPRITE_HOVER.h * TEX_SCALE
+            };
+            SDL_RenderTexture(ren, tex, &SPRITE_HOVER, &dst);
+        }
+
+        SDL_RenderPresent(ren);
+
+
         SDL_Delay(2);
+
+    }
+
+}
+
+void Game::handleMouseMove(int mouseX, int mouseY) {
+    constexpr int CELL_SIZE = 50;
+
+    int col = (mouseX - PAD_X) / CELL_SIZE;
+    int row = (mouseY - PAD_Y) / CELL_SIZE;
+
+    if (col >= 0 && row >= 0) {
+        hoveredCellX = col;
+        hoveredCellY = row;
+    } else {
+        hoveredCellX = hoveredCellY = -1;
     }
 }
+

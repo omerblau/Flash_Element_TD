@@ -71,6 +71,8 @@ public:
 
     void run();
 
+    void handleMouseMove(int mouseX, int mouseY);
+
 private:
 
     static constexpr int FPS = 60;
