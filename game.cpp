@@ -5,7 +5,7 @@
 
 static constexpr bool DEBUG = true;
 
-std::optional<std::pair<int, int>> hoveredCell;
+//std::optional<std::pair<int, int>> hoveredCell;
 int hoveredCellX = -1;
 int hoveredCellY = -1;
 
@@ -240,7 +240,8 @@ void Game::run() {
     SDL_FRect buy_arrow = {620, 350, sprite_buy_arrow.w * TEX_SCALE, sprite_buy_arrow.h * TEX_SCALE};
 
 
-    SDL_FRect SPRITE_HOVER = {316, 25, 52, 32};
+    //
+    SDL_FRect SPRITE_HOVER = {sprite_ui_can_place_tower.x, sprite_ui_can_place_tower.y, sprite_ui_can_place_tower.w, sprite_ui_can_place_tower.h};
 
     constexpr float STEP = 1.0f / FPS;
     float spriteAngle = aimAt(
@@ -276,8 +277,10 @@ void Game::run() {
         renderFrame(sheepRect, mapDst, spriteAngle, buy_air, buy_cannon, buy_arrow);
 
 
+
+
         if (hoveredCellX >= 0 && hoveredCellY >= 0) {
-            constexpr int CELL_SIZE = 52;
+            constexpr int CELL_SIZE = 10;
             SDL_FRect dst = {
                 PAD_X + hoveredCellX * CELL_SIZE,
                 PAD_Y + hoveredCellY * CELL_SIZE,
@@ -286,6 +289,8 @@ void Game::run() {
             };
             SDL_RenderTexture(ren, tex, &SPRITE_HOVER, &dst);
         }
+
+
 
         SDL_RenderPresent(ren);
 
@@ -297,10 +302,10 @@ void Game::run() {
 }
 
 void Game::handleMouseMove(int mouseX, int mouseY) {
-    constexpr int CELL_SIZE = 50;
+    constexpr int CELL_SIZE = 10;
 
-    int col = (mouseX - PAD_X) / CELL_SIZE;
-    int row = (mouseY - PAD_Y) / CELL_SIZE;
+    int col = (mouseX - PAD_X - sprite_ui_can_place_tower.w / 2.0f) / CELL_SIZE;
+    int row = (mouseY - PAD_Y - sprite_ui_can_place_tower.h / 2.0f) / CELL_SIZE;
 
     if (col >= 0 && row >= 0) {
         hoveredCellX = col;
