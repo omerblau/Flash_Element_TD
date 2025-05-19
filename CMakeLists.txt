@@ -17,6 +17,8 @@ add_executable(
         game.cpp
         game.h
         pong.cpp
+        element.cpp
+        element.h
 )
 
 set(SDL_STATIC ON)
