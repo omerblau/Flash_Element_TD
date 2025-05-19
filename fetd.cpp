@@ -152,7 +152,7 @@ namespace fetd {
 
     /**
      * @brief Processes and maintains slow effects on creeps.
-     * 
+     *
      * This system manages temporary speed reduction effects caused by certain
      * tower types like the Water Tower. It decreases the duration of active
      * slow effects and removes them when they expire.
@@ -191,7 +191,7 @@ namespace fetd {
 
     /**
      * @brief Calculates and applies interest to player's gold.
-     * 
+     *
      * This system applies interest bonuses to the player's gold balance
      * at the end of each wave based on the current interest rate. Interest
      * provides passive income that scales with the player's saved gold.
@@ -341,46 +341,46 @@ namespace fetd {
         
         return entity;
     }
-    
+
     /**
      * @brief Creates a Water Tower entity at the specified grid position.
-     * 
+     *
      * Water Towers have a slowing effect and can target both ground and air units.
      * They deal less direct damage but strategically reduce enemy movement speed.
-     * 
+     *
      * @param x The x-coordinate on the grid
      * @param y The y-coordinate on the grid
      * @return bagel::ent_type The entity ID of the created tower
      */
     bagel::ent_type createWaterTower(float x, float y) {
         bagel::ent_type entity = bagel::World::createEntity();
-        
+
         // Position component with the given coordinates
         PositionComponent pos{x, y};
-        
+
         // Common tower components
         RenderableComponent renderable{4}; // Sprite ID for water tower
         TowerEntity tower{};
         RangeComponent range{3.0f}; // Standard range
         DamageComponent damage{8}; // Lower damage but applies slow
         UpgradeLevelComponent level{0}; // Start at level 0
-        
+
         // Special component: can target air units
         CanHitAirEntity canHitAir{};
-        
+
         // Add all components
         bagel::World::addComponents(entity, pos, renderable, tower, range, damage, level, canHitAir);
-        
+
         return entity;
     }
-    
+
     /**
      * @brief Creates a Fire Tower entity at the specified grid position.
-     * 
+     *
      * Fire Towers are versatile defensive structures that deal splash damage,
      * can hit both ground and air units, and deal bonus damage to immune creeps.
      * They are more expensive but extremely effective against mixed unit types.
-     * 
+     *
      * @param x The x-coordinate on the grid
      * @param y The y-coordinate on the grid
      * @return bagel::ent_type The entity ID of the created tower
@@ -402,77 +402,77 @@ namespace fetd {
         SplashRadiusComponent splash{1.2f}; // Area effect radius
         CanHitAirEntity canHitAir{};
         BonusVsImmuneComponent bonusVsImmune{1.5f}; // 50% bonus vs immune
-        
+
         // Add all components
-        bagel::World::addComponents(entity, pos, renderable, tower, range, damage, level, 
+        bagel::World::addComponents(entity, pos, renderable, tower, range, damage, level,
                                    splash, canHitAir, bonusVsImmune);
-        
+
         return entity;
     }
-    
+
     /**
      * @brief Creates an Earth Tower entity at the specified grid position.
-     * 
+     *
      * Earth Towers deal massive single-target damage to ground units.
      * They have shorter range but compensate with extremely high damage output.
      * Effective against high-health creeps but cannot target air units.
-     * 
+     *
      * @param x The x-coordinate on the grid
      * @param y The y-coordinate on the grid
      * @return bagel::ent_type The entity ID of the created tower
      */
     bagel::ent_type createEarthTower(float x, float y) {
         bagel::ent_type entity = bagel::World::createEntity();
-        
+
         // Position component with the given coordinates
         PositionComponent pos{x, y};
-        
+
         // Common tower components
         RenderableComponent renderable{6}; // Sprite ID for earth tower
         TowerEntity tower{};
         RangeComponent range{2.5f}; // Shorter range
         DamageComponent damage{25}; // Very high damage
         UpgradeLevelComponent level{0}; // Start at level 0
-        
+
         // Add all components
         bagel::World::addComponents(entity, pos, renderable, tower, range, damage, level);
-        
+
         return entity;
     }
-    
+
     /**
      * @brief Creates a Rocket Tower entity at the specified grid position.
-     * 
+     *
      * Rocket Towers have exceptional range and high damage, capable of hitting
-     * both ground and air units from far away. They're expensive but provide 
+     * both ground and air units from far away. They're expensive but provide
      * strategic coverage across large areas of the map.
-     * 
+     *
      * @param x The x-coordinate on the grid
      * @param y The y-coordinate on the grid
      * @return bagel::ent_type The entity ID of the created tower
      */
     bagel::ent_type createRocketTower(float x, float y) {
         bagel::ent_type entity = bagel::World::createEntity();
-        
+
         // Position component with the given coordinates
         PositionComponent pos{x, y};
-        
+
         // Common tower components
         RenderableComponent renderable{7}; // Sprite ID for rocket tower
         TowerEntity tower{};
         RangeComponent range{5.0f}; // Very long range
         DamageComponent damage{20}; // High damage
         UpgradeLevelComponent level{0}; // Start at level 0
-        
+
         // Special component: can target air units
         CanHitAirEntity canHitAir{};
-        
+
         // Add all components
         bagel::World::addComponents(entity, pos, renderable, tower, range, damage, level, canHitAir);
-        
+
         return entity;
     }
-    
+
     /**
      * @brief Creates a Ground Creep enemy entity at the specified position.
      * 
@@ -507,46 +507,46 @@ namespace fetd {
         
         return entity;
     }
-    
+
     /**
      * @brief Creates an Air Creep flying enemy entity at the specified position.
-     * 
+     *
      * Air Creeps are faster flying units with less health than Ground Creeps.
      * They yield more gold when defeated, but can only be targeted by towers
      * with the CanHitAir or AirOnly capabilities. They follow the same path
      * as ground units but can only be damaged by certain tower types.
-     * 
+     *
      * @param x The x-coordinate on the grid to spawn the creep
      * @param y The y-coordinate on the grid to spawn the creep
      * @return bagel::ent_type The entity ID of the created air creep
      */
     bagel::ent_type createAirCreep(float x, float y) {
         bagel::ent_type entity = bagel::World::createEntity();
-        
+
         // Position component with the given coordinates
         PositionComponent pos{x, y};
-        
+
         // Common creep components
         RenderableComponent renderable{21}; // Sprite ID for air creep
         CreepEntity creep{};
         HealthComponent health{35}; // Lower health than ground units
         GoldBountyComponent bounty{15}; // More gold than ground units
-        
+
         // Movement components
         VelocityComponent velocity{0.f, 0.f}; // Initial velocity
         SpeedComponent speed{1.2f}; // Faster than ground units
         PathProgressComponent pathProgress{0}; // Start at waypoint 0
-        
+
         // Special components
         AirUnitEntity airUnit{}; // Flying unit
-        
+
         // Add all components
         bagel::World::addComponents(entity, pos, renderable, creep, health, bounty,
                                    velocity, speed, pathProgress, airUnit);
-        
+
         return entity;
     }
-    
+
     /**
      * @brief Creates a Projectile entity fired from a tower.
      * 
