@@ -19,6 +19,9 @@ namespace element {
 
     using Creep_Tag = struct {};
     using Player_Tag = struct {};
+    using Mouse_Tag = struct {};
+    // @formatter:on               //  ← formatter back on
+
     using Buy_Tag = struct {};
     using UIButton_Tag = struct {};
     using Arrow_Tag = struct {};
@@ -45,6 +48,7 @@ namespace element {
         static constexpr SDL_FRect RABID_TEX = {
             sprite_2.x + PAD + 5, sprite_2.y + PAD, sprite_2.w - 2 * PAD, sprite_2.h - 2 * PAD
         };
+        static constexpr float CELL_SIZE = 10;
 
     private:
         /// init helpers
@@ -66,9 +70,11 @@ namespace element {
         void path_navigation_system() const;// sets Velocity + WaypointIndex
         void movement_system() const;       // applies Velocity to Transform
         void endpoint_system() const;
+        void placing_tower_system() const;
         void wave_system() const;
 
 
+        void createMouse() const;
 
         static constexpr int WIN_WIDTH = 1280;
         static constexpr int WIN_HEIGHT = 800;
@@ -84,6 +90,11 @@ namespace element {
         static constexpr SDL_FRect BUY_ARROW_TEX = {sprite_buy_arrow.x, sprite_buy_arrow.y, sprite_buy_arrow.w, sprite_buy_arrow.h};
         static constexpr SDL_FRect BUY_CANNON_TEX = {sprite_buy_cannon.x, sprite_buy_cannon.y, sprite_buy_cannon.w, sprite_buy_cannon.h};
         static constexpr SDL_FRect BUY_AIR_TEX = {sprite_buy_air.x, sprite_buy_air.y, sprite_buy_air.w, sprite_buy_air.h};
+
+
+        static constexpr SDL_FRect SPRITE_HOVER = {sprite_ui_can_place_tower.x, sprite_ui_can_place_tower.y, sprite_ui_can_place_tower.w, sprite_ui_can_place_tower.h};
+        static constexpr SDL_FRect SPRITE_HOVER_CANT_PLACE = {sprite_ui_cant_place_tower.x, sprite_ui_cant_place_tower.y, sprite_ui_cant_place_tower.w, sprite_ui_cant_place_tower.h};
+
 
         SDL_Window *win = nullptr;
         SDL_Renderer *ren = nullptr;

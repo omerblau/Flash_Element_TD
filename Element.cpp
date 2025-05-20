@@ -79,9 +79,18 @@ namespace element {
             Drawable{BUY_AIR_TEX, {BUY_AIR_TEX.w * TEX_SCALE, BUY_AIR_TEX.h * TEX_SCALE}}, // sprite + size
             Buy_Tag{}, // UI tag
             UIButton_Tag{},
-            Air_Tag{} // tower‐type tag
+            Air_Tag{});// tower‐type tag
+    }
+
+    void Element::createMouse() const {
+        Entity mouseEntity = Entity::create();
+        mouseEntity.addAll(
+        Transform{{0,0}, 0.f},
+        Drawable{SPRITE_HOVER, {sprite_ui_cant_place_tower.w * TEX_SCALE, sprite_ui_cant_place_tower.h * TEX_SCALE}},
+        Mouse_Tag{}
         );
     }
+
     void Element::createNextLevelButton() const {
         Entity nextLevelButtonEntity = Entity::create();
         nextLevelButtonEntity.addAll(
@@ -205,6 +214,38 @@ namespace element {
             t.p.x += vel.v.x * DT;
             t.p.y += vel.v.y * DT;
         }
+    }
+
+    void Element::placing_tower_system() const {
+        static const Mask mask = MaskBuilder()
+        .set<Transform>()
+        .set<Mouse_Tag>()
+        .build();
+
+        float mouseX, mouseY;
+        SDL_GetMouseState(&mouseX, &mouseY);
+
+        const float  mapX = (mouseX-MAP_TEX_PAD_X) / TEX_SCALE;
+        const float  mapY = (mouseY-MAP_TEX_PAD_Y) / TEX_SCALE;
+
+        int col = (mapX) / CELL_SIZE;
+        int row = (mapY) / CELL_SIZE;
+
+
+        if (col >= 0 && row >= 0) {
+            SDL_FPoint center = toScreen(
+                col * CELL_SIZE + sprite_ui_can_place_tower.h / 2.0f ,
+                row * CELL_SIZE + sprite_ui_can_place_tower.w / 2.0f
+            );
+
+            for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+                if (World::mask(e).test(mask)) {
+                    World::getComponent<Transform>(e).p = center;
+                }
+            }
+        }
+
+
     }
 
     void Element::endpoint_system() const {
@@ -412,6 +453,7 @@ namespace element {
         createNextLevelButton();
 
         createPlayer();
+        createMouse();
         createGameState(); // sets up CurrentLevel{0}
         createSpawnManager(); // sets up SpawnState for WAVE[0]
     }
@@ -433,6 +475,11 @@ namespace element {
         bool quit = false;
 
         while (!quit) {
+            placing_tower_system();
+            // move_system();
+            // box_system();
+            // score_system();
+            //
             // input_system();
             wave_system();
             path_navigation_system();
