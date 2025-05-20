@@ -14,7 +14,7 @@ using namespace std;
 using namespace bagel;
 
 namespace element {
-    /// init helpers
+    /// init helpers  // @formatter:off
     bool Element::prepareWindowAndTexture() {
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             cout << SDL_GetError() << endl;
@@ -40,12 +40,11 @@ namespace element {
         SDL_DestroySurface(surf);
         return true;
     }
-
     void Element::createMap() const {
         const float w = MAP_TEX.w * TEX_SCALE;
         const float h = MAP_TEX.h * TEX_SCALE;
-        const float cx = MAP_TEX_PAD_X + w * 0.5f; // centre-x
         const float cy = MAP_TEX_PAD_Y + h * 0.5f; // centre-y
+        const float cx = MAP_TEX_PAD_X + w * 0.5f; // centre-x
 
         Entity mapEntity = Entity::create();
         mapEntity.addAll(
@@ -53,7 +52,44 @@ namespace element {
             Drawable{MAP_TEX, {MAP_TEX.w * TEX_SCALE, MAP_TEX.h * TEX_SCALE}}
         );
     }
-
+    void Element::createBuyArrow() const {
+        Entity buyArrowEntity = Entity::create();
+        buyArrowEntity.addAll(
+            Transform{{800, 380}, 0.f}, // place at (cx, cy)
+            Drawable{BUY_ARROW_TEX, {BUY_ARROW_TEX.w * TEX_SCALE, BUY_ARROW_TEX.h * TEX_SCALE}}, // sprite + size
+            Buy_Tag{}, // UI tag
+            UIButton_Tag{},
+            Arrow_Tag{} // tower‐type tag
+        );
+    }
+    void Element::createBuyCannon() const {
+        Entity buyCannonEntity = Entity::create();
+        buyCannonEntity.addAll(
+            Transform{{880, 380}, 0.f}, // place at (cx, cy)
+            Drawable{BUY_CANNON_TEX, {BUY_CANNON_TEX.w * TEX_SCALE, BUY_CANNON_TEX.h * TEX_SCALE}}, // sprite + size
+            Buy_Tag{}, // UI tag
+            UIButton_Tag{},
+            Cannon_Tag{} // tower‐type tag
+        );
+    }
+    void Element::createBuyAir() const {
+        Entity buyAirEntity = Entity::create();
+        buyAirEntity.addAll(
+            Transform{{960, 380}, 0.f}, // place at (cx, cy)
+            Drawable{BUY_AIR_TEX, {BUY_AIR_TEX.w * TEX_SCALE, BUY_AIR_TEX.h * TEX_SCALE}}, // sprite + size
+            Buy_Tag{}, // UI tag
+            UIButton_Tag{},
+            Air_Tag{} // tower‐type tag
+        );
+    }
+    void Element::createNextLevelButton() const {
+        Entity nextLevelButtonEntity = Entity::create();
+        nextLevelButtonEntity.addAll(
+            Transform{{790, 694}, 0.f}, // place at (cx, cy)
+            Drawable{UI_NEXT_LEVEL, {UI_NEXT_LEVEL.w * TEX_SCALE, UI_NEXT_LEVEL.h * TEX_SCALE}}, // sprite + size
+            UIButton_Tag{}
+        );
+    }
     void Element::createPlayer() const {
         Entity playerEntity = Entity::create();
         playerEntity.addAll(
@@ -62,7 +98,6 @@ namespace element {
             Player_Tag{}
         );
     }
-
     void Element::createGameState() const {
         Entity levelEntity = Entity::create();
         levelEntity.addAll(
@@ -70,7 +105,6 @@ namespace element {
             CurrentLevel{0} // start at wave 0
         );
     }
-
     void Element::createSpawnManager() const {
         // look up the first wave config:
         const Wave &w = WAVES[0];
@@ -85,7 +119,6 @@ namespace element {
             }
         );
     }
-
     void Element::createCreep(float x, float y, float a, float speed, int hp,
                               int goldBounty, SDL_FRect spriteRect) const {
         Entity creepEntity = Entity::create();
@@ -100,6 +133,7 @@ namespace element {
             Creep_Tag{}
         );
     }
+    // @formatter:on
 
     /// systems
     void Element::path_navigation_system() const {
@@ -240,7 +274,7 @@ namespace element {
                 break;
             }
         }
-        if (mgr.id == -1) return;  // no spawn manager?
+        if (mgr.id == -1) return; // no spawn manager?
 
         // 2) Access its SpawnState
         auto &st = World::getComponent<SpawnState>(mgr);
@@ -262,15 +296,15 @@ namespace element {
         // 6) Spawn one creep if any remain in this wave
         if (st.remaining > 0) {
             createCreep(
-                TURNS[0].x, TURNS[0].y,  // spawn position & initial angle
-                0.f,                     // we’ll orient in navigation
-                w.speed,                 // speed
-                w.hp,                    // hit points
-                w.gold,                  // gold bounty
-                w.sprite                 // sprite rect
+                TURNS[0].x, TURNS[0].y, // spawn position & initial angle
+                0.f, // we’ll orient in navigation
+                w.speed, // speed
+                w.hp, // hit points
+                w.gold, // gold bounty
+                w.sprite // sprite rect
             );
             st.remaining -= 1;
-            st.timeLeft    = w.delay;
+            st.timeLeft = w.delay;
             return;
         }
 
@@ -279,13 +313,11 @@ namespace element {
         if (st.waveIndex < WAVE_COUNT) {
             const Wave &next = WAVES[st.waveIndex];
             st.remaining = next.count;
-            st.timeLeft  = 0.f;  // immediately spawn the first creep of the new wave
+            st.timeLeft = 0.f; // immediately spawn the first creep of the new wave
         }
         // If st.waveIndex == WAVE_COUNT, we’ve finished _all_ waves and
         // the guard at step (3) will keep us from indexing further.
     }
-
-
 
     void Element::draw_system() const {
         static const Mask mask = MaskBuilder()
@@ -371,15 +403,17 @@ namespace element {
     Element::Element() {
         if (!prepareWindowAndTexture())
             return;
-        SDL_srand(time(nullptr));
 
         createMap();
+
+        createBuyArrow();
+        createBuyCannon();
+        createBuyAir();
+        createNextLevelButton();
+
         createPlayer();
         createGameState(); // sets up CurrentLevel{0}
         createSpawnManager(); // sets up SpawnState for WAVE[0]
-        // createCreep(TURNS[0].x, TURNS[0].y, 90.f, 100.f,
-        //             10, 1, RABID_TEX
-        // );
     }
 
     Element::~Element() {
