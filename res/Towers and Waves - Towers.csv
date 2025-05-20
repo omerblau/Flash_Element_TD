@@ -1,13 +1,13 @@
-Tower Name,Element(s),Cost,Damage,Range,Attack Rate,levelup unique (not in the table) effects,Special Effects,Target Types,Unlock Requirement(s)
-Arrow 1,None,7,16,100,Very fast,None,None,Ground/Air,Always Available
-Arrow 2,None,13,16,110,Very fast,None,None,Ground/Air,Always Available
-Arrow 3,None,32,6,125,Very fast,None,None,Ground/Air,Always Available
+Tower Name, Element(s), Cost,   Damage, Range,  Attack Rate,    levelup unique (not in the table) effects,Special Effects,Target Types,Unlock Requirement(s)
+Arrow 1,    None,       7,      6,      100,    Very fast,None,None,Ground/Air,Always Available
+Arrow 2,    None,       13,     16,     110,    Very fast,None,None,Ground/Air,Always Available
+Arrow 3,    None,       32,     26,     125,    Very fast,None,None,Ground/Air,Always Available
 ,,,,,,,,,
-Cannon 1,None,9,9,70,Very fast,None,Splash Damage,Ground,Always Available
+Cannon 1,   None,       9,      9,      70,     Very fast,None,Splash Damage,Ground,Always Available
 Cannon 2,None,15,24,70,Very fast,None,Splash Damage,Ground,Always Available
 Cannon 3,None,26,50,70,Very fast,Splash Damage increase to 60,Splash Damage,Ground,Always Available
 ,,,,,,,,,
-Air 1,None,12,20,120,Very fast,None,None,Air,Always Available
+Air 1,      None,       12,     20,     120,    Very fast,None,None,Air,Always Available
 Air 2,None,20,35,120,Very fast,increased attack speed ,None,Air,Always Available
 Air 3,None,30,56,120,Very fast,increased attack speed (again),None,Air,Always Available
 ,,,,,,,,,

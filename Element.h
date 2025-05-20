@@ -5,7 +5,7 @@
 namespace element {
     enum class UIAction {
         None, BuyArrow, BuyCannon, BuyAir,
-        NextLevel, PlaceArrow, PlaceCannon, PlaceAir
+        NextLevel,
     };
 
     /// components
@@ -57,21 +57,22 @@ namespace element {
         static constexpr SDL_FRect RABID_TEX = {
             sprite_2.x + PAD + 5, sprite_2.y + PAD, sprite_2.w - 2 * PAD, sprite_2.h - 2 * PAD
         };
-        static constexpr float CELL_SIZE = 10;
-
-
 
     private:
         /// init helpers
         bool prepareWindowAndTexture();
+
         void createMap() const;
         void createBuyArrow() const;
         void createBuyCannon() const;
         void createBuyAir() const;
         void createNextLevelButton() const;
+        void createUI() const;
+
         void createMouse() const;
         void createPlayer() const;
         void createGameState() const;
+
         void createSpawnManager() const;
         void createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const;
         void createTower(float x, float y, float a, float range, int healthDamage,

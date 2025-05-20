@@ -1,26 +1,27 @@
 #include "Element.h"
+#include "bagel.h"
 
 #include <iostream>
 #include <string>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
+#include <algorithm> // for std::clamp
 
 
 using namespace std;
-
-#include "bagel.h"
 using namespace bagel;
+
 
 namespace element {
     //------------------------------------------------------------------------------
     // helper to find the first entity matching a mask
     //------------------------------------------------------------------------------
-    static bagel::ent_type findEntity(const bagel::Mask &mask) {
-        for (bagel::ent_type e{0}; e.id <= bagel::World::maxId().id; ++e.id) {
-            if (bagel::World::mask(e).test(mask))
+    static ent_type findEntity(const Mask &mask) {
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(mask))
                 return e;
         }
-        return bagel::ent_type{-1};
+        return ent_type{-1};
     }
 
     /// init helpers  // @formatter:off
@@ -96,6 +97,14 @@ namespace element {
             NextLevel_Tag{}
         );
     }
+    void Element::createUI() const {
+        createMap();
+        createBuyArrow();
+        createBuyCannon();
+        createBuyAir();
+        createNextLevelButton();
+    }
+
     void Element::createMouse() const {
         Entity mouseEntity = Entity::create();
         mouseEntity.addAll(
@@ -159,6 +168,7 @@ namespace element {
     }
     // @formatter:on
 
+
     /// systems
     void Element::input_system() {
         static const Mask mouseMask = MaskBuilder()
@@ -206,7 +216,6 @@ namespace element {
 
         ent_type mouseEnt = findEntity(mouseMask);
         if (mouseEnt.id == -1) return;
-
         const auto &mi = World::getComponent<MouseInput>(mouseEnt);
         if (!mi.clicked) return; // only respond to an actual click
 
@@ -220,7 +229,8 @@ namespace element {
         if (gs.id == -1) return;
 
         auto &intent = World::getComponent<UIIntent>(gs);
-        intent.action = UIAction::None; // reset before setting a new one
+        if (intent.action == UIAction::NextLevel)
+            intent.action = UIAction::None; // reset before setting a new one
 
         // 3) Hit‐test every UIButton_Tag
         static const Mask btnMask = MaskBuilder()
@@ -327,6 +337,68 @@ namespace element {
     }
 
     void Element::placing_tower_system() const {
+        static const Mask mouseMask = MaskBuilder()
+                .set<Mouse_Tag>()
+                .set<MouseInput>()
+                .set<Transform>()
+                .set<Drawable>()
+                .build();
+
+        static const Mask intentMask = MaskBuilder()
+                .set<GameState_Tag>()
+                .set<UIIntent>()
+                .build();
+
+        // 1) Find mouse entity and UIIntent
+        ent_type mouseEnt = findEntity(mouseMask);
+        if (mouseEnt.id == -1) return;
+        auto &mi = World::getComponent<MouseInput>(mouseEnt);
+        auto &mouseD = World::getComponent<Drawable>(mouseEnt);
+
+        ent_type gs = findEntity(intentMask);
+        if (gs.id == -1) return;
+        auto &intent = World::getComponent<UIIntent>(gs);
+
+        // 2) If no buy-intent, clear any ghost sprite and bail
+        if (intent.action == UIAction::None) {
+            mouseD.part = SDL_FRect{}; // empty
+            return;
+        }
+
+        // 3) Pick the correct tower sprite for the ghost
+        SDL_FRect spriteRect;
+        if (intent.action == UIAction::BuyArrow) spriteRect = TOWER_TEX_ARROW;
+        else if (intent.action == UIAction::BuyCannon) spriteRect = TOWER_TEX_CANNON;
+        else if (intent.action == UIAction::BuyAir) spriteRect = TOWER_TEX_AIR;
+        else return;
+
+        // 4) Attach ghost to mouse
+        mouseD.part = spriteRect;
+        mouseD.size = {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE};
+
+        // 5) On click, place real tower if inside map bounds
+        if (mi.clicked) {
+            float mx = mi.x, my = mi.y;
+            // map rectangle in screen coords:
+            float mapLeft = MAP_TEX_PAD_X;
+            float mapRight = MAP_TEX_PAD_X + MAP_TEX.w * TEX_SCALE;
+            float mapTop = MAP_TEX_PAD_Y;
+            float mapBottom = MAP_TEX_PAD_Y + MAP_TEX.h * TEX_SCALE;
+
+            if (mx >= mapLeft && mx <= mapRight && my >= mapTop && my <= mapBottom) {
+                // spawn real tower at mouse
+                float angle = 0.f; // adjust as needed
+                float range = 4.f; // example
+                int dmg = 3; // example
+                float rate = 0.5f; // example
+                createTower(mx, my, angle, range, dmg, rate, spriteRect);
+
+                // consume the intent
+                intent.action = UIAction::None;
+                // clear ghost
+                mouseD.part = SDL_FRect{};
+            }
+        }
     }
 
     void Element::endpoint_system() const {
@@ -507,30 +579,12 @@ namespace element {
 
     /// game
     Element::Element() {
-        if (!prepareWindowAndTexture())
-            return;
-
-        createMap();
-
-        createBuyArrow();
-        createBuyCannon();
-        createBuyAir();
-        createNextLevelButton();
-
+        if (!prepareWindowAndTexture()) return;
+        createUI();
         createPlayer();
         createMouse();
-        createGameState(); // sets up CurrentLevel{0}
-        createSpawnManager(); // sets up SpawnState for WAVE[0]
-
-        createTower(
-    20 * CELL_SIZE,        // x במפת-מקור  (≈ 200px לפני Scale/Pad)
-    20 * CELL_SIZE,        // y
-    0.0f,                  // אין סיבוב התחלתי
-    4 * CELL_SIZE,         // Range = 4 תאים
-    3,                     // Damage = 3 HP
-    0.5f,                  // fire-rate: ירייה כל חצי שנייה
-    TOWER_TEX_AIR              // SDL_FRect של הספְרייט
-);
+        createGameState();
+        createSpawnManager();
     }
 
     Element::~Element() {
@@ -550,6 +604,7 @@ namespace element {
         while (true) {
             input_system();
             ui_system();
+            placing_tower_system();
 
             wave_system();
             path_navigation_system();
