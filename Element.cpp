@@ -145,6 +145,18 @@ namespace element {
             Creep_Tag{}
         );
     }
+    void Element::createTower(float x, float y, float a, float range, int healthDamage,
+                             float fire_rate, SDL_FRect spriteRect) const {
+        Entity creepEntity = Entity::create();
+        creepEntity.addAll(
+            Transform{{x, y}, a},
+            Drawable{spriteRect, {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE}},
+            Range {range},
+            Damage {healthDamage},
+            FireRate {fire_rate, 0.0f},
+            Target {-1}
+        );
+    }
     // @formatter:on
 
     /// systems
@@ -509,6 +521,16 @@ namespace element {
         createMouse();
         createGameState(); // sets up CurrentLevel{0}
         createSpawnManager(); // sets up SpawnState for WAVE[0]
+
+        createTower(
+    20 * CELL_SIZE,        // x במפת-מקור  (≈ 200px לפני Scale/Pad)
+    20 * CELL_SIZE,        // y
+    0.0f,                  // אין סיבוב התחלתי
+    4 * CELL_SIZE,         // Range = 4 תאים
+    3,                     // Damage = 3 HP
+    0.5f,                  // fire-rate: ירייה כל חצי שנייה
+    TOWER_TEX_AIR              // SDL_FRect של הספְרייט
+);
     }
 
     Element::~Element() {

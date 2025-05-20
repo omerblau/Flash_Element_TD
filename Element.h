@@ -22,6 +22,10 @@ namespace element {
     using SpawnState = struct {int waveIndex; int remaining; float timeLeft;};
     using MouseInput = struct {int x; int y; bool clicked;};
     using UIIntent = struct {UIAction action = UIAction::None;};
+    using Range = struct {float value;};
+    using Damage = struct {int value;};
+    using FireRate = struct {float interval; float timeLeft;};
+    using Target = struct {int id;};
 
     /// Tags
     using Creep_Tag = struct {};
@@ -55,6 +59,8 @@ namespace element {
         };
         static constexpr float CELL_SIZE = 10;
 
+
+
     private:
         /// init helpers
         bool prepareWindowAndTexture();
@@ -68,6 +74,8 @@ namespace element {
         void createGameState() const;
         void createSpawnManager() const;
         void createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const;
+        void createTower(float x, float y, float a, float range, int healthDamage,
+                             float fire_rate, SDL_FRect spriteRect) const;
 
         /// systems
         void input_system();
@@ -96,6 +104,18 @@ namespace element {
 
         static constexpr SDL_FRect SPRITE_HOVER = {sprite_ui_can_place_tower.x, sprite_ui_can_place_tower.y, sprite_ui_can_place_tower.w, sprite_ui_can_place_tower.h};
         static constexpr SDL_FRect SPRITE_HOVER_CANT_PLACE = {sprite_ui_cant_place_tower.x, sprite_ui_cant_place_tower.y, sprite_ui_cant_place_tower.w, sprite_ui_cant_place_tower.h};
+
+
+        static constexpr SDL_FRect TOWER_TEX_AIR = {
+            sprite_tower_air.x , sprite_tower_air.y, sprite_tower_air.w , sprite_tower_air.h
+        };
+        static constexpr SDL_FRect TOWER_TEX_ARROW = {
+            sprite_tower_arrow.x , sprite_tower_arrow.y, sprite_tower_arrow.w , sprite_tower_arrow.h
+        };
+
+        static constexpr SDL_FRect TOWER_TEX_CANNON = {
+            sprite_tower_cannon_1.x , sprite_tower_cannon_1.y, sprite_tower_cannon_1.w , sprite_tower_cannon_1.h
+        };
 
 
         SDL_Window *win = nullptr;
