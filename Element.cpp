@@ -1,5 +1,7 @@
 #include "Element.h"
+
 #include <iostream>
+#include <string>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
@@ -12,6 +14,7 @@ using namespace std;
 using namespace bagel;
 
 namespace element {
+    /// init helpers
     bool Element::prepareWindowAndTexture() {
         if (!SDL_Init(SDL_INIT_VIDEO)) {
             cout << SDL_GetError() << endl;
@@ -51,20 +54,6 @@ namespace element {
         );
     }
 
-    void Element::createSheep() const {
-        Entity sheepEntity = Entity::create();
-        sheepEntity.addAll(
-            Transform{{TURNS[0].x, TURNS[0].y}, 90.f},
-            Drawable{SHEEP_TEX, {SHEEP_TEX.w * TEX_SCALE, SHEEP_TEX.h * TEX_SCALE}},
-            WaypointIndex{1}, // head to waypoint #1
-            Velocity{{0.f, 0.f}},
-            Speed{20.f},
-            HP{10, 10},
-            Gold_Bounty{2},
-            Creep_Tag{}
-        );
-    }
-
     void Element::createPlayer() const {
         Entity playerEntity = Entity::create();
         playerEntity.addAll(
@@ -74,6 +63,45 @@ namespace element {
         );
     }
 
+    void Element::createGameState() const {
+        Entity levelEntity = Entity::create();
+        levelEntity.addAll(
+            LevelManager_Tag{}, // marks this as the singleton level controller
+            CurrentLevel{0} // start at wave 0
+        );
+    }
+
+    void Element::createSpawnManager() const {
+        // look up the first wave config:
+        const Wave &w = WAVES[0];
+
+        Entity spawnEntity = Entity::create();
+        spawnEntity.addAll(
+            SpawnManager_Tag{}, // marks the singleton spawn controller
+            SpawnState{
+                0, // waveIndex = 0
+                w.count, // remaining = number of creeps to spawn
+                0.f // timeLeft = spawn immediately
+            }
+        );
+    }
+
+    void Element::createCreep(float x, float y, float a, float speed, int hp,
+                              int goldBounty, SDL_FRect spriteRect) const {
+        Entity creepEntity = Entity::create();
+        creepEntity.addAll(
+            Transform{{x, y}, a},
+            Drawable{spriteRect, {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE}},
+            WaypointIndex{1}, // head to waypoint #1
+            Velocity{{0.f, 0.f}},
+            Speed{speed},
+            HP{hp, hp},
+            Gold_Bounty{goldBounty},
+            Creep_Tag{}
+        );
+    }
+
+    /// systems
     void Element::path_navigation_system() const {
         static const Mask mask = MaskBuilder()
                 .set<Transform>()
@@ -86,43 +114,42 @@ namespace element {
         constexpr float SNAP = 1.0f; // px distance considered “arrived”
 
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (World::mask(e).test(mask)) {
-                auto &t = World::getComponent<Transform>(e);
-                auto &wi = World::getComponent<WaypointIndex>(e);
-                const auto &sp = World::getComponent<Speed>(e);
-                auto &vel = World::getComponent<Velocity>(e);
+            if (!World::mask(e).test(mask))
+                continue;
 
-                if (wi.idx >= TURN_COUNT)
-                    continue; // creep already at the end
+            auto &t = World::getComponent<Transform>(e);
+            auto &wi = World::getComponent<WaypointIndex>(e);
+            const auto &sp = World::getComponent<Speed>(e);
+            auto &vel = World::getComponent<Velocity>(e);
 
-                float wx = TURNS[wi.idx].x;
-                float wy = TURNS[wi.idx].y;
+            if (wi.idx >= TURN_COUNT)
+                continue; // creep already at the end
 
-                float dx = wx - t.p.x;
-                float dy = wy - t.p.y;
-                float distSq = dx * dx + dy * dy;
+            float wx = TURNS[wi.idx].x;
+            float wy = TURNS[wi.idx].y;
 
-                if (distSq < SNAP * SNAP) {
-                    // snap & advance
-                    ++wi.idx;
-                    if (wi.idx >= TURN_COUNT) {
-                        // reached base – handled elsewhere
-                        continue;
-                    }
-                    dx = TURNS[wi.idx].x - t.p.x;
-                    dy = TURNS[wi.idx].y - t.p.y;
-                }
+            float dx = wx - t.p.x;
+            float dy = wy - t.p.y;
+            float distSq = dx * dx + dy * dy;
 
-                float len = SDL_sqrtf(dx * dx + dy * dy);
-                if (len < 1e-4f) len = 1.0f;
+            if (distSq < SNAP * SNAP) {
+                ++wi.idx; // snap & advance
+                if (wi.idx >= TURN_COUNT) // reached base – handled elsewhere
+                    continue;
 
-                vel.v = {
-                    dx / len * sp.value, // pixels per second
-                    dy / len * sp.value
-                };
-
-                t.a = RAD_TO_DEG * SDL_atan2f(vel.v.y, vel.v.x); // facing angle
+                dx = TURNS[wi.idx].x - t.p.x;
+                dy = TURNS[wi.idx].y - t.p.y;
             }
+
+            float len = SDL_sqrtf(dx * dx + dy * dy);
+            if (len < 1e-4f) len = 1.0f;
+
+            vel.v = {
+                dx / len * sp.value, // pixels per second
+                dy / len * sp.value
+            };
+
+            t.a = RAD_TO_DEG * SDL_atan2f(vel.v.y, vel.v.x); // facing angle
         }
     }
 
@@ -134,7 +161,8 @@ namespace element {
                 .build();
 
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (!World::mask(e).test(mask)) continue;
+            if (!World::mask(e).test(mask))
+                continue;
 
             auto &t = World::getComponent<Transform>(e);
             const auto &vel = World::getComponent<Velocity>(e);
@@ -146,7 +174,117 @@ namespace element {
     }
 
     void Element::endpoint_system() const {
+        // 1. Build masks
+        static const Mask creepMask = MaskBuilder()
+                .set<Creep_Tag>()
+                .set<WaypointIndex>()
+                .set<Transform>()
+                .set<HP>()
+                .set<Gold_Bounty>()
+                .build();
+
+        static const Mask playerMask = MaskBuilder()
+                .set<Player_Tag>()
+                .set<HP>()
+                .set<Gold>()
+                .build();
+
+        // 2. Find the player entity (cache once)
+        static ent_type player{-1};
+        if (player.id == -1) {
+            for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+                if (World::mask(e).test(playerMask)) {
+                    player = e;
+                    break;
+                }
+            }
+        }
+        if (player.id == -1) return; // no player found? bail
+
+        auto &playerHP = World::getComponent<HP>(player);
+        auto &playerGold = World::getComponent<Gold>(player);
+
+        // 3. Process each creep that’s reached the end
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (!World::mask(e).test(creepMask))
+                continue;
+
+            auto &wi = World::getComponent<WaypointIndex>(e);
+            auto &t = World::getComponent<Transform>(e);
+            const auto &bounty = World::getComponent<Gold_Bounty>(e);
+
+            if (wi.idx >= TURN_COUNT) {
+                // a) Penalize the player
+                playerHP.current = std::max(0, playerHP.current - 1);
+                playerGold.current = std::max(0, playerGold.current - bounty.value);
+
+                // b) Respawn the creep at the start
+                t.p.x = TURNS[0].x;
+                t.p.y = TURNS[0].y;
+                wi.idx = 1; // head toward waypoint #1 next frame
+            }
+        }
     }
+
+    void Element::wave_system() const {
+        // 1) Find the singleton SpawnManager entity
+        static const Mask mask = MaskBuilder()
+                .set<SpawnManager_Tag>()
+                .set<SpawnState>()
+                .build();
+
+        ent_type mgr{-1};
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(mask)) {
+                mgr = e;
+                break;
+            }
+        }
+        if (mgr.id == -1) return;  // no spawn manager?
+
+        // 2) Access its SpawnState
+        auto &st = World::getComponent<SpawnState>(mgr);
+
+        // 3) If we've run all waves, do nothing
+        if (st.waveIndex >= WAVE_COUNT) {
+            return;
+        }
+
+        // 4) Grab the current wave config
+        const Wave &w = WAVES[st.waveIndex];
+
+        // 5) Countdown timer (only while spawning waves remain)
+        st.timeLeft -= DT;
+        if (st.timeLeft > 0.f) {
+            return;
+        }
+
+        // 6) Spawn one creep if any remain in this wave
+        if (st.remaining > 0) {
+            createCreep(
+                TURNS[0].x, TURNS[0].y,  // spawn position & initial angle
+                0.f,                     // we’ll orient in navigation
+                w.speed,                 // speed
+                w.hp,                    // hit points
+                w.gold,                  // gold bounty
+                w.sprite                 // sprite rect
+            );
+            st.remaining -= 1;
+            st.timeLeft    = w.delay;
+            return;
+        }
+
+        // 7) This wave is done → advance to the next one (if it exists)
+        st.waveIndex += 1;
+        if (st.waveIndex < WAVE_COUNT) {
+            const Wave &next = WAVES[st.waveIndex];
+            st.remaining = next.count;
+            st.timeLeft  = 0.f;  // immediately spawn the first creep of the new wave
+        }
+        // If st.waveIndex == WAVE_COUNT, we’ve finished _all_ waves and
+        // the guard at step (3) will keep us from indexing further.
+    }
+
 
 
     void Element::draw_system() const {
@@ -158,17 +296,19 @@ namespace element {
         SDL_RenderClear(ren);
 
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (World::mask(e).test(mask)) {
-                const auto &d = World::getComponent<Drawable>(e);
-                const auto &t = World::getComponent<Transform>(e);
+            if (!World::mask(e).test(mask))
+                continue;
 
-                const SDL_FRect dst = {
-                    t.p.x - d.size.x / 2,
-                    t.p.y - d.size.y / 2,
-                    d.size.x, d.size.y
-                };
+            const auto &d = World::getComponent<Drawable>(e);
+            const auto &t = World::getComponent<Transform>(e);
 
-                /* ----------  DEBUG PADDING OVERLAY  ---------- */
+            const SDL_FRect dst = {
+                t.p.x - d.size.x / 2,
+                t.p.y - d.size.y / 2,
+                d.size.x, d.size.y
+            };
+
+            /* ----------  DEBUG PADDING OVERLAY  ---------- */
 #ifdef DEBUG_DRAW
                 // solid magenta backdrop
                 SDL_SetRenderDrawColor(ren, 255, 0, 255, 255);
@@ -178,18 +318,56 @@ namespace element {
                 SDL_SetRenderDrawColor(ren, 0, 255, 0, 255);
                 SDL_RenderRect(ren, &dst);
 #endif
-                /* --------------------------------------------- */
+            /* --------------------------------------------- */
 
-                SDL_RenderTextureRotated(
-                    ren, tex, &d.part, &dst, t.a,
-                    nullptr, SDL_FLIP_NONE);
-            }
+            SDL_RenderTextureRotated(
+                ren, tex, &d.part, &dst, t.a,
+                nullptr, SDL_FLIP_NONE);
         }
 
         SDL_RenderPresent(ren);
+        print_status_bar();
     }
 
+    void Element::print_status_bar() const {
+        // find the player
+        static const Mask uiMask = MaskBuilder()
+                .set<Player_Tag>()
+                .set<HP>()
+                .set<Gold>()
+                .build();
 
+        ent_type player{-1};
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(uiMask)) {
+                player = e;
+                break;
+            }
+        }
+        if (player.id == -1) return;
+
+        // fetch current values
+        int hp = World::getComponent<HP>(player).current;
+        int gold = World::getComponent<Gold>(player).current;
+
+        // remember last printed values
+        static int lastHP = -1;
+        static int lastGold = -1;
+
+        // only print if something changed
+        if (hp == lastHP && gold == lastGold)
+            return;
+
+        lastHP = hp;
+        lastGold = gold;
+
+        // now print one line and newline
+        std::cout << "HP: " << hp
+                << "   Gold: " << gold
+                << std::endl;
+    }
+
+    /// game
     Element::Element() {
         if (!prepareWindowAndTexture())
             return;
@@ -197,7 +375,11 @@ namespace element {
 
         createMap();
         createPlayer();
-        createSheep();
+        createGameState(); // sets up CurrentLevel{0}
+        createSpawnManager(); // sets up SpawnState for WAVE[0]
+        // createCreep(TURNS[0].x, TURNS[0].y, 90.f, 100.f,
+        //             10, 1, RABID_TEX
+        // );
     }
 
     Element::~Element() {
@@ -218,12 +400,12 @@ namespace element {
 
         while (!quit) {
             // input_system();
-            // move_system();
-            // box_system();
-            // score_system();
-            //
+            wave_system();
             path_navigation_system();
             movement_system();
+            //targeting_system
+            //damage_system
+            endpoint_system();
             draw_system();
 
             auto end = SDL_GetTicks();
