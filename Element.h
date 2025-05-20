@@ -37,6 +37,7 @@ namespace element {
         void draw_system() const;
         void path_navigation_system() const;   // sets Velocity + WaypointIndex
         void movement_system() const;          // applies Velocity to Transform
+        void endpoint_system() const;
 
         bool prepareWindowAndTexture();
 

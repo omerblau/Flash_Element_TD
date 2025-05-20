@@ -83,19 +83,69 @@ namespace element {
                 .set<Creep_Tag>()
                 .build();
 
-
         constexpr float SNAP = 1.0f; // px distance considered “arrived”
+
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
             if (World::mask(e).test(mask)) {
-                auto& t  = World::getComponent<Transform>(e);
-                auto& wi = World::getComponent<WaypointIndex>(e);
-                const auto& sp = World::getComponent<Speed>(e);
-                auto& vel = World::getComponent<Velocity>(e);
+                auto &t = World::getComponent<Transform>(e);
+                auto &wi = World::getComponent<WaypointIndex>(e);
+                const auto &sp = World::getComponent<Speed>(e);
+                auto &vel = World::getComponent<Velocity>(e);
+
+                if (wi.idx >= TURN_COUNT)
+                    continue; // creep already at the end
+
+                float wx = TURNS[wi.idx].x;
+                float wy = TURNS[wi.idx].y;
+
+                float dx = wx - t.p.x;
+                float dy = wy - t.p.y;
+                float distSq = dx * dx + dy * dy;
+
+                if (distSq < SNAP * SNAP) {
+                    // snap & advance
+                    ++wi.idx;
+                    if (wi.idx >= TURN_COUNT) {
+                        // reached base – handled elsewhere
+                        continue;
+                    }
+                    dx = TURNS[wi.idx].x - t.p.x;
+                    dy = TURNS[wi.idx].y - t.p.y;
+                }
+
+                float len = SDL_sqrtf(dx * dx + dy * dy);
+                if (len < 1e-4f) len = 1.0f;
+
+                vel.v = {
+                    dx / len * sp.value, // pixels per second
+                    dy / len * sp.value
+                };
+
+                t.a = RAD_TO_DEG * SDL_atan2f(vel.v.y, vel.v.x); // facing angle
             }
         }
     }
 
     void Element::movement_system() const {
+        // Only entities with a Transform and a Velocity move
+        static const Mask mask = MaskBuilder()
+                .set<Transform>()
+                .set<Velocity>()
+                .build();
+
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (!World::mask(e).test(mask)) continue;
+
+            auto &t = World::getComponent<Transform>(e);
+            const auto &vel = World::getComponent<Velocity>(e);
+
+            // DT is seconds per frame (1 / FPS)
+            t.p.x += vel.v.x * DT;
+            t.p.y += vel.v.y * DT;
+        }
+    }
+
+    void Element::endpoint_system() const {
     }
 
 
@@ -172,6 +222,8 @@ namespace element {
             // box_system();
             // score_system();
             //
+            path_navigation_system();
+            movement_system();
             draw_system();
 
             auto end = SDL_GetTicks();
