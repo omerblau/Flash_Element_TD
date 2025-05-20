@@ -5,8 +5,6 @@
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 
-// #define DEBUG_DRAW   // ← uncomment while tuning padding
-
 
 using namespace std;
 
@@ -14,6 +12,17 @@ using namespace std;
 using namespace bagel;
 
 namespace element {
+    //------------------------------------------------------------------------------
+    // helper to find the first entity matching a mask
+    //------------------------------------------------------------------------------
+    static bagel::ent_type findEntity(const bagel::Mask &mask) {
+        for (bagel::ent_type e{0}; e.id <= bagel::World::maxId().id; ++e.id) {
+            if (bagel::World::mask(e).test(mask))
+                return e;
+        }
+        return bagel::ent_type{-1};
+    }
+
     /// init helpers  // @formatter:off
     bool Element::prepareWindowAndTexture() {
         if (!SDL_Init(SDL_INIT_VIDEO)) {
@@ -41,10 +50,10 @@ namespace element {
         return true;
     }
     void Element::createMap() const {
-        const float w = MAP_TEX.w * TEX_SCALE;
-        const float h = MAP_TEX.h * TEX_SCALE;
-        const float cy = MAP_TEX_PAD_Y + h * 0.5f; // centre-y
-        const float cx = MAP_TEX_PAD_X + w * 0.5f; // centre-x
+        constexpr auto w = MAP_TEX.w * TEX_SCALE;
+        constexpr auto h = MAP_TEX.h * TEX_SCALE;
+        constexpr auto cy = MAP_TEX_PAD_Y + h * 0.5f; // centre-y
+        constexpr auto cx = MAP_TEX_PAD_X + w * 0.5f; // centre-x
 
         Entity mapEntity = Entity::create();
         mapEntity.addAll(
@@ -57,7 +66,6 @@ namespace element {
         buyArrowEntity.addAll(
             Transform{{800, 380}, 0.f}, // place at (cx, cy)
             Drawable{BUY_ARROW_TEX, {BUY_ARROW_TEX.w * TEX_SCALE, BUY_ARROW_TEX.h * TEX_SCALE}}, // sprite + size
-            Buy_Tag{}, // UI tag
             UIButton_Tag{},
             Arrow_Tag{} // tower‐type tag
         );
@@ -67,7 +75,6 @@ namespace element {
         buyCannonEntity.addAll(
             Transform{{880, 380}, 0.f}, // place at (cx, cy)
             Drawable{BUY_CANNON_TEX, {BUY_CANNON_TEX.w * TEX_SCALE, BUY_CANNON_TEX.h * TEX_SCALE}}, // sprite + size
-            Buy_Tag{}, // UI tag
             UIButton_Tag{},
             Cannon_Tag{} // tower‐type tag
         );
@@ -77,26 +84,25 @@ namespace element {
         buyAirEntity.addAll(
             Transform{{960, 380}, 0.f}, // place at (cx, cy)
             Drawable{BUY_AIR_TEX, {BUY_AIR_TEX.w * TEX_SCALE, BUY_AIR_TEX.h * TEX_SCALE}}, // sprite + size
-            Buy_Tag{}, // UI tag
             UIButton_Tag{},
             Air_Tag{});// tower‐type tag
     }
-
-    void Element::createMouse() const {
-        Entity mouseEntity = Entity::create();
-        mouseEntity.addAll(
-        Transform{{0,0}, 0.f},
-        Drawable{SPRITE_HOVER, {sprite_ui_cant_place_tower.w * TEX_SCALE, sprite_ui_cant_place_tower.h * TEX_SCALE}},
-        Mouse_Tag{}
-        );
-    }
-
     void Element::createNextLevelButton() const {
         Entity nextLevelButtonEntity = Entity::create();
         nextLevelButtonEntity.addAll(
             Transform{{790, 694}, 0.f}, // place at (cx, cy)
             Drawable{UI_NEXT_LEVEL, {UI_NEXT_LEVEL.w * TEX_SCALE, UI_NEXT_LEVEL.h * TEX_SCALE}}, // sprite + size
-            UIButton_Tag{}
+            UIButton_Tag{},
+            NextLevel_Tag{}
+        );
+    }
+    void Element::createMouse() const {
+        Entity mouseEntity = Entity::create();
+        mouseEntity.addAll(
+        Transform{{0,0}, 0.f},
+        Drawable{{},{}},
+        MouseInput{ 0, 0, false },
+        Mouse_Tag{}
         );
     }
     void Element::createPlayer() const {
@@ -110,29 +116,26 @@ namespace element {
     void Element::createGameState() const {
         Entity levelEntity = Entity::create();
         levelEntity.addAll(
-            LevelManager_Tag{}, // marks this as the singleton level controller
-            CurrentLevel{0} // start at wave 0
+            GameState_Tag{}, // marks this as the singleton level controller
+            CurrentLevel{0}, // start at wave 0
+            UIIntent{}    // starts at None
         );
     }
     void Element::createSpawnManager() const {
-        // look up the first wave config:
-        const Wave &w = WAVES[0];
-
         Entity spawnEntity = Entity::create();
         spawnEntity.addAll(
             SpawnManager_Tag{}, // marks the singleton spawn controller
             SpawnState{
-                0, // waveIndex = 0
-                w.count, // remaining = number of creeps to spawn
+                -1, // waveIndex = 0
+                0, // remaining = number of creeps to spawn
                 0.f // timeLeft = spawn immediately
             }
         );
     }
-    void Element::createCreep(float x, float y, float a, float speed, int hp,
-                              int goldBounty, SDL_FRect spriteRect) const {
+    void Element::createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const {
         Entity creepEntity = Entity::create();
         creepEntity.addAll(
-            Transform{{x, y}, a},
+            Transform{{TURNS[0].x, TURNS[0].y}, 0.f,},
             Drawable{spriteRect, {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE}},
             WaypointIndex{1}, // head to waypoint #1
             Velocity{{0.f, 0.f}},
@@ -145,6 +148,101 @@ namespace element {
     // @formatter:on
 
     /// systems
+    void Element::input_system() {
+        static const Mask mouseMask = MaskBuilder()
+                .set<Mouse_Tag>()
+                .set<MouseInput>()
+                .set<Transform>()
+                .build();
+
+        auto mouseEnt = findEntity(mouseMask);
+        if (mouseEnt.id == -1) return;
+
+        auto &mi = World::getComponent<MouseInput>(mouseEnt);
+        auto &t = World::getComponent<Transform>(mouseEnt);
+
+        // 2) Clear last frame’s click
+        mi.clicked = false;
+
+        // 3) Poll SDL events and feed into that same mouseEnt
+        SDL_Event e;
+        while (SDL_PollEvent(&e)) {
+            if (e.type == SDL_EVENT_QUIT) exit(0);
+
+            if (e.type == SDL_EVENT_MOUSE_MOTION) {
+                mi.x = e.motion.x;
+                mi.y = e.motion.y;
+            } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                mi.x = e.button.x;
+                mi.y = e.button.y;
+                mi.clicked = true;
+            }
+
+            // always update the visual cursor position too
+            t.p.x = static_cast<float>(mi.x);
+            t.p.y = static_cast<float>(mi.y);
+        }
+    }
+
+    void Element::ui_system() const {
+        // 1) Read the one & only MouseInput entity
+        static const Mask mouseMask = MaskBuilder()
+                .set<Mouse_Tag>()
+                .set<MouseInput>()
+                .set<Transform>()
+                .build();
+
+        ent_type mouseEnt = findEntity(mouseMask);
+        if (mouseEnt.id == -1) return;
+
+        const auto &mi = World::getComponent<MouseInput>(mouseEnt);
+        if (!mi.clicked) return; // only respond to an actual click
+
+        // 2) Grab the single GameState (where UIIntent lives)
+        static const Mask intentMask = MaskBuilder()
+                .set<GameState_Tag>() // I assume this is your GameState tag
+                .set<UIIntent>()
+                .build();
+
+        ent_type gs = findEntity(intentMask);
+        if (gs.id == -1) return;
+
+        auto &intent = World::getComponent<UIIntent>(gs);
+        intent.action = UIAction::None; // reset before setting a new one
+
+        // 3) Hit‐test every UIButton_Tag
+        static const Mask btnMask = MaskBuilder()
+                .set<UIButton_Tag>()
+                .set<Transform>()
+                .set<Drawable>()
+                .build();
+
+        for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
+            if (!World::mask(b).test(btnMask))
+                continue;
+
+            const auto &t = World::getComponent<Transform>(b);
+            const auto &d = World::getComponent<Drawable>(b);
+            // @formatter:off
+            float left   = t.p.x - d.size.x/2;
+            float right  = t.p.x + d.size.x/2;
+            float top    = t.p.y - d.size.y/2;
+            float bottom = t.p.y + d.size.y/2;
+
+            if (mi.x < left || mi.x > right || mi.y < top || mi.y > bottom)
+                continue;
+
+            const Mask &m = World::mask(b);
+            // if      (m.test(Component<Arrow_Tag>::Bit))       intent.action = UIAction::BuyArrow;
+            if      (m.test(Component<Arrow_Tag>::Bit))       intent.action = UIAction::BuyArrow;
+            else if (m.test(Component<Cannon_Tag>::Bit))      intent.action = UIAction::BuyCannon;
+            else if (m.test(Component<Air_Tag>::Bit))         intent.action = UIAction::BuyAir;
+            else if (m.test(Component<NextLevel_Tag>::Bit))   intent.action = UIAction::NextLevel;
+            break;
+            // @formatter:on
+        }
+    }
+
     void Element::path_navigation_system() const {
         static const Mask mask = MaskBuilder()
                 .set<Transform>()
@@ -217,35 +315,6 @@ namespace element {
     }
 
     void Element::placing_tower_system() const {
-        static const Mask mask = MaskBuilder()
-        .set<Transform>()
-        .set<Mouse_Tag>()
-        .build();
-
-        float mouseX, mouseY;
-        SDL_GetMouseState(&mouseX, &mouseY);
-
-        const float  mapX = (mouseX-MAP_TEX_PAD_X) / TEX_SCALE;
-        const float  mapY = (mouseY-MAP_TEX_PAD_Y) / TEX_SCALE;
-
-        int col = (mapX) / CELL_SIZE;
-        int row = (mapY) / CELL_SIZE;
-
-
-        if (col >= 0 && row >= 0) {
-            SDL_FPoint center = toScreen(
-                col * CELL_SIZE + sprite_ui_can_place_tower.h / 2.0f ,
-                row * CELL_SIZE + sprite_ui_can_place_tower.w / 2.0f
-            );
-
-            for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-                if (World::mask(e).test(mask)) {
-                    World::getComponent<Transform>(e).p = center;
-                }
-            }
-        }
-
-
     }
 
     void Element::endpoint_system() const {
@@ -265,15 +334,7 @@ namespace element {
                 .build();
 
         // 2. Find the player entity (cache once)
-        static ent_type player{-1};
-        if (player.id == -1) {
-            for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-                if (World::mask(e).test(playerMask)) {
-                    player = e;
-                    break;
-                }
-            }
-        }
+        static ent_type player = findEntity(playerMask);
         if (player.id == -1) return; // no player found? bail
 
         auto &playerHP = World::getComponent<HP>(player);
@@ -302,62 +363,66 @@ namespace element {
     }
 
     void Element::wave_system() const {
-        // 1) Find the singleton SpawnManager entity
-        static const Mask mask = MaskBuilder()
+        // 1) Find SpawnManager singleton
+        static const Mask mgrMask = MaskBuilder()
                 .set<SpawnManager_Tag>()
                 .set<SpawnState>()
                 .build();
-
         ent_type mgr{-1};
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (World::mask(e).test(mask)) {
+            if (World::mask(e).test(mgrMask)) {
                 mgr = e;
                 break;
             }
         }
-        if (mgr.id == -1) return; // no spawn manager?
-
-        // 2) Access its SpawnState
+        if (mgr.id == -1) return;
         auto &st = World::getComponent<SpawnState>(mgr);
 
-        // 3) If we've run all waves, do nothing
-        if (st.waveIndex >= WAVE_COUNT) {
-            return;
-        }
-
-        // 4) Grab the current wave config
-        const Wave &w = WAVES[st.waveIndex];
-
-        // 5) Countdown timer (only while spawning waves remain)
-        st.timeLeft -= DT;
-        if (st.timeLeft > 0.f) {
-            return;
-        }
-
-        // 6) Spawn one creep if any remain in this wave
+        // 2) If we're mid-spawning this wave, continue countdown + spawn
         if (st.remaining > 0) {
-            createCreep(
-                TURNS[0].x, TURNS[0].y, // spawn position & initial angle
-                0.f, // we’ll orient in navigation
-                w.speed, // speed
-                w.hp, // hit points
-                w.gold, // gold bounty
-                w.sprite // sprite rect
-            );
-            st.remaining -= 1;
-            st.timeLeft = w.delay;
+            const Wave &w = WAVES[st.waveIndex];
+            st.timeLeft -= DT;
+            if (st.timeLeft <= 0.f) {
+                createCreep(w.speed, w.hp, w.gold, w.sprite);
+                st.remaining -= 1;
+                st.timeLeft = w.delay;
+            }
             return;
         }
 
-        // 7) This wave is done → advance to the next one (if it exists)
+        // no new wave until current one’s creeps are all gone and player clicked
+        // 3) Ensure no creeps remain alive before allowing next-wave click
+        static const Mask creepMask = MaskBuilder().set<Creep_Tag>().build();
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(creepMask))
+                return;
+        }
+
+        // 4) Handle NextLevel click to start the next wave
+        static const Mask intentMask = MaskBuilder()
+                .set<GameState_Tag>()
+                .set<UIIntent>()
+                .build();
+        ent_type gs{-1};
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(intentMask)) {
+                gs = e;
+                break;
+            }
+        }
+        if (gs.id == -1) return;
+        auto &intent = World::getComponent<UIIntent>(gs);
+        if (intent.action != UIAction::NextLevel)
+            return;
+
+        // 5) Advance and initialize next wave
         st.waveIndex += 1;
         if (st.waveIndex < WAVE_COUNT) {
-            const Wave &next = WAVES[st.waveIndex];
-            st.remaining = next.count;
-            st.timeLeft = 0.f; // immediately spawn the first creep of the new wave
+            const Wave &w = WAVES[st.waveIndex];
+            st.remaining = w.count;
+            st.timeLeft = 0.f;
         }
-        // If st.waveIndex == WAVE_COUNT, we’ve finished _all_ waves and
-        // the guard at step (3) will keep us from indexing further.
+        intent.action = UIAction::None;
     }
 
     void Element::draw_system() const {
@@ -380,18 +445,6 @@ namespace element {
                 t.p.y - d.size.y / 2,
                 d.size.x, d.size.y
             };
-
-            /* ----------  DEBUG PADDING OVERLAY  ---------- */
-#ifdef DEBUG_DRAW
-                // solid magenta backdrop
-                SDL_SetRenderDrawColor(ren, 255, 0, 255, 255);
-                SDL_RenderFillRect(ren, &dst);
-
-                // 1-px green outline
-                SDL_SetRenderDrawColor(ren, 0, 255, 0, 255);
-                SDL_RenderRect(ren, &dst);
-#endif
-            /* --------------------------------------------- */
 
             SDL_RenderTextureRotated(
                 ren, tex, &d.part, &dst, t.a,
@@ -469,21 +522,17 @@ namespace element {
         SDL_Quit();
     }
 
-    void Element::run() {
+    [[noreturn]] void Element::run() {
         SDL_SetRenderDrawColor(ren, 0, 0, 0, 255);
         auto start = SDL_GetTicks();
-        bool quit = false;
+        while (true) {
+            input_system();
+            ui_system();
 
-        while (!quit) {
-            placing_tower_system();
-            // move_system();
-            // box_system();
-            // score_system();
-            //
-            // input_system();
             wave_system();
             path_navigation_system();
             movement_system();
+
             //targeting_system
             //damage_system
             endpoint_system();
@@ -494,14 +543,6 @@ namespace element {
                 SDL_Delay(GAME_FRAME - (end - start));
             }
             start += GAME_FRAME;
-
-            SDL_Event e;
-            while (SDL_PollEvent(&e)) {
-                if (e.type == SDL_EVENT_QUIT)
-                    quit = true;
-                else if ((e.type == SDL_EVENT_KEY_DOWN) && (e.key.scancode == SDL_SCANCODE_ESCAPE))
-                    quit = true;
-            }
         }
     }
 }

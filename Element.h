@@ -3,12 +3,16 @@
 #include "res/atlas.h"
 
 namespace element {
+    enum class UIAction {
+        None, BuyArrow, BuyCannon, BuyAir,
+        NextLevel, PlaceArrow, PlaceCannon, PlaceAir
+    };
+
     /// components
     // @formatter:off              //  components
     using Transform = struct {SDL_FPoint p; float a;};
     using Drawable = struct {SDL_FRect part; SDL_FPoint size;};
     using Gold = struct {int current;};
-
     using HP = struct {int current; int initial;};
     using Gold_Bounty = struct {int value;};
     using Speed = struct {float value;};
@@ -16,18 +20,19 @@ namespace element {
     using WaypointIndex = struct { int idx; };          // next target in TURNS[]
     using CurrentLevel = struct { int level; };         // which entry in WAVES[]
     using SpawnState = struct {int waveIndex; int remaining; float timeLeft;};
+    using MouseInput = struct {int x; int y; bool clicked;};
+    using UIIntent = struct {UIAction action = UIAction::None;};
 
+    /// Tags
     using Creep_Tag = struct {};
     using Player_Tag = struct {};
     using Mouse_Tag = struct {};
-    // @formatter:on               //  ← formatter back on
-
-    using Buy_Tag = struct {};
     using UIButton_Tag = struct {};
     using Arrow_Tag = struct {};
     using Cannon_Tag = struct {};
     using Air_Tag = struct {};
-    using LevelManager_Tag = struct {};
+    using NextLevel_Tag = struct {};
+    using GameState_Tag = struct {};
     using SpawnManager_Tag = struct {};
 
     class Element {
@@ -35,7 +40,7 @@ namespace element {
         Element();
         ~Element();
 
-        void run(); // main loop
+        [[noreturn]] void run(); // main loop
 
         static constexpr float MAP_TEX_PAD_X = 20.0f;
         static constexpr float MAP_TEX_PAD_Y = 20.0f;
@@ -58,23 +63,22 @@ namespace element {
         void createBuyCannon() const;
         void createBuyAir() const;
         void createNextLevelButton() const;
+        void createMouse() const;
         void createPlayer() const;
         void createGameState() const;
         void createSpawnManager() const;
-        void createCreep(float x, float y, float a, float speed, int hp,
-                         int goldBounty, SDL_FRect spriteRect) const;
+        void createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const;
 
         /// systems
-        void draw_system() const;
-        void print_status_bar() const; //helper for draw
+        void input_system();
+        void ui_system() const;
         void path_navigation_system() const;// sets Velocity + WaypointIndex
         void movement_system() const;       // applies Velocity to Transform
         void endpoint_system() const;
         void placing_tower_system() const;
         void wave_system() const;
-
-
-        void createMouse() const;
+        void print_status_bar() const; //helper for draw
+        void draw_system() const;
 
         static constexpr int WIN_WIDTH = 1280;
         static constexpr int WIN_HEIGHT = 800;
@@ -84,13 +88,11 @@ namespace element {
         static constexpr float GAME_FRAME = 1000.f / FPS;
         static constexpr float RAD_TO_DEG = 57.2958f;
 
-
-        static constexpr SDL_FRect MAP_TEX = {sprite_map.x, sprite_map.y, sprite_map.w, sprite_map.h};
-        static constexpr SDL_FRect UI_NEXT_LEVEL = {sprite_ui_next_level.x, sprite_ui_next_level.y, sprite_ui_next_level.w, sprite_ui_next_level.h};
-        static constexpr SDL_FRect BUY_ARROW_TEX = {sprite_buy_arrow.x, sprite_buy_arrow.y, sprite_buy_arrow.w, sprite_buy_arrow.h};
+        static constexpr SDL_FRect MAP_TEX =        {sprite_map.x, sprite_map.y, sprite_map.w, sprite_map.h};
+        static constexpr SDL_FRect UI_NEXT_LEVEL =  {sprite_ui_next_level.x, sprite_ui_next_level.y, sprite_ui_next_level.w, sprite_ui_next_level.h};
+        static constexpr SDL_FRect BUY_ARROW_TEX =  {sprite_buy_arrow.x, sprite_buy_arrow.y, sprite_buy_arrow.w, sprite_buy_arrow.h};
         static constexpr SDL_FRect BUY_CANNON_TEX = {sprite_buy_cannon.x, sprite_buy_cannon.y, sprite_buy_cannon.w, sprite_buy_cannon.h};
-        static constexpr SDL_FRect BUY_AIR_TEX = {sprite_buy_air.x, sprite_buy_air.y, sprite_buy_air.w, sprite_buy_air.h};
-
+        static constexpr SDL_FRect BUY_AIR_TEX =    {sprite_buy_air.x, sprite_buy_air.y, sprite_buy_air.w, sprite_buy_air.h};
 
         static constexpr SDL_FRect SPRITE_HOVER = {sprite_ui_can_place_tower.x, sprite_ui_can_place_tower.y, sprite_ui_can_place_tower.w, sprite_ui_can_place_tower.h};
         static constexpr SDL_FRect SPRITE_HOVER_CANT_PLACE = {sprite_ui_cant_place_tower.x, sprite_ui_cant_place_tower.y, sprite_ui_cant_place_tower.w, sprite_ui_cant_place_tower.h};
