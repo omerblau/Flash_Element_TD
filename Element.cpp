@@ -75,6 +75,23 @@ namespace element {
     }
 
     void Element::path_navigation_system() const {
+        static const Mask mask = MaskBuilder()
+                .set<Transform>()
+                .set<Speed>()
+                .set<WaypointIndex>()
+                .set<Velocity>()
+                .set<Creep_Tag>()
+                .build();
+
+        constexpr float SNAP = 1.0f; // px distance considered “arrived”
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(mask)) {
+                auto& t  = World::getComponent<Transform>(e);
+                auto& wi = World::getComponent<WaypointIndex>(e);
+                const auto& sp = World::getComponent<Speed>(e);
+                auto& vel = World::getComponent<Velocity>(e);
+            }
+        }
     }
 
     void Element::movement_system() const {
