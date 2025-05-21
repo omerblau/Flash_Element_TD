@@ -1,26 +1,27 @@
 #include "Element.h"
+#include "bagel.h"
 
 #include <iostream>
 #include <string>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
+#include <algorithm> // for std::clamp
 
 
 using namespace std;
-
-#include "bagel.h"
 using namespace bagel;
+
 
 namespace element {
     //------------------------------------------------------------------------------
     // helper to find the first entity matching a mask
     //------------------------------------------------------------------------------
-    static bagel::ent_type findEntity(const bagel::Mask &mask) {
-        for (bagel::ent_type e{0}; e.id <= bagel::World::maxId().id; ++e.id) {
-            if (bagel::World::mask(e).test(mask))
+    static ent_type findEntity(const Mask &mask) {
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(mask))
                 return e;
         }
-        return bagel::ent_type{-1};
+        return ent_type{-1};
     }
 
     /// init helpers  // @formatter:off
@@ -96,6 +97,14 @@ namespace element {
             NextLevel_Tag{}
         );
     }
+    void Element::createUI() const {
+        createMap();
+        createBuyArrow();
+        createBuyCannon();
+        createBuyAir();
+        createNextLevelButton();
+    }
+
     void Element::createMouse() const {
         Entity mouseEntity = Entity::create();
         mouseEntity.addAll(
@@ -159,6 +168,7 @@ namespace element {
     }
     // @formatter:on
 
+
     /// systems
     void Element::input_system() {
         static const Mask mouseMask = MaskBuilder()
@@ -206,7 +216,6 @@ namespace element {
 
         ent_type mouseEnt = findEntity(mouseMask);
         if (mouseEnt.id == -1) return;
-
         const auto &mi = World::getComponent<MouseInput>(mouseEnt);
         if (!mi.clicked) return; // only respond to an actual click
 
@@ -220,7 +229,8 @@ namespace element {
         if (gs.id == -1) return;
 
         auto &intent = World::getComponent<UIIntent>(gs);
-        intent.action = UIAction::None; // reset before setting a new one
+        if (intent.action == UIAction::NextLevel)
+            intent.action = UIAction::None; // reset before setting a new one
 
         // 3) Hit‐test every UIButton_Tag
         static const Mask btnMask = MaskBuilder()
@@ -327,6 +337,68 @@ namespace element {
     }
 
     void Element::placing_tower_system() const {
+        static const Mask mouseMask = MaskBuilder()
+                .set<Mouse_Tag>()
+                .set<MouseInput>()
+                .set<Transform>()
+                .set<Drawable>()
+                .build();
+
+        static const Mask intentMask = MaskBuilder()
+                .set<GameState_Tag>()
+                .set<UIIntent>()
+                .build();
+
+        // 1) Find mouse entity and UIIntent
+        ent_type mouseEnt = findEntity(mouseMask);
+        if (mouseEnt.id == -1) return;
+        auto &mi = World::getComponent<MouseInput>(mouseEnt);
+        auto &mouseD = World::getComponent<Drawable>(mouseEnt);
+
+        ent_type gs = findEntity(intentMask);
+        if (gs.id == -1) return;
+        auto &intent = World::getComponent<UIIntent>(gs);
+
+        // 2) If no buy-intent, clear any ghost sprite and bail
+        if (intent.action == UIAction::None) {
+            mouseD.part = SDL_FRect{}; // empty
+            return;
+        }
+
+        // 3) Pick the correct tower sprite for the ghost
+        SDL_FRect spriteRect;
+        if (intent.action == UIAction::BuyArrow) spriteRect = TOWER_TEX_ARROW;
+        else if (intent.action == UIAction::BuyCannon) spriteRect = TOWER_TEX_CANNON;
+        else if (intent.action == UIAction::BuyAir) spriteRect = TOWER_TEX_AIR;
+        else return;
+
+        // 4) Attach ghost to mouse
+        mouseD.part = spriteRect;
+        mouseD.size = {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE};
+
+        // 5) On click, place real tower if inside map bounds
+        if (mi.clicked) {
+            float mx = mi.x, my = mi.y;
+            // map rectangle in screen coords:
+            float mapLeft = MAP_TEX_PAD_X;
+            float mapRight = MAP_TEX_PAD_X + MAP_TEX.w * TEX_SCALE;
+            float mapTop = MAP_TEX_PAD_Y;
+            float mapBottom = MAP_TEX_PAD_Y + MAP_TEX.h * TEX_SCALE;
+
+            if (mx >= mapLeft && mx <= mapRight && my >= mapTop && my <= mapBottom) {
+                // spawn real tower at mouse
+                float angle = 0.f; // adjust as needed
+                float range = 4.f; // example
+                int dmg = 3; // example
+                float rate = 0.5f; // example
+                createTower(mx, my, angle, range, dmg, rate, spriteRect);
+
+                // consume the intent
+                intent.action = UIAction::None;
+                // clear ghost
+                mouseD.part = SDL_FRect{};
+            }
+        }
     }
 
     void Element::endpoint_system() const {
@@ -437,180 +509,6 @@ namespace element {
         intent.action = UIAction::None;
     }
 
-
-
-    // קומפוננט חדש לשעון נסיעה של קליע
-    struct TravelTime { float timeLeft; };
-
-
-
-
-
-
-//=========================
-// TOWER TARGETING SYSTEM
-//=========================
-void Element::targeting_system() const {
-    static const Mask towerMask = MaskBuilder()
-        .set<Transform>().set<Range>().set<Target>().build();
-    static const Mask creepMask = MaskBuilder()
-        .set<Transform>().set<Creep_Tag>().build();
-
-    for (ent_type t{0}; t.id <= World::maxId().id; ++t.id)
-        if (World::mask(t).test(towerMask)) {
-            auto &tTarget = World::getComponent<Target>(t);
-            const auto &tPos = World::getComponent<Transform>(t).p;
-            const float tRange = World::getComponent<Range>(t).value;
-            const float rangeSq = tRange * tRange;
-
-            //   ▸ 1. אם יש מטרה – ודא שהיא חיה ובטווח
-            if (tTarget.id != -1) {
-                ent_type creep{tTarget.id};
-                if (!World::mask(creep).test(creepMask)) {
-                    tTarget.id = -1;               // מת / נעלם
-                } else {
-                    const auto &cPos = World::getComponent<Transform>(creep).p;
-                    float dx = tPos.x - cPos.x;
-                    float dy = tPos.y - cPos.y;
-                    if (dx*dx + dy*dy > rangeSq)
-                        tTarget.id = -1;           // יצא מטווח
-                }
-            }
-
-            //   ▸ 2. אין מטרה – מצא קריפ ראשון שנכנס לטווח
-            if (tTarget.id == -1) {
-                for (ent_type c{0}; c.id <= World::maxId().id; ++c.id)
-                    if (World::mask(c).test(creepMask)) {
-                        const auto &cPos = World::getComponent<Transform>(c).p;
-                        float dx = tPos.x - cPos.x;
-                        float dy = tPos.y - cPos.y;
-                        if (dx*dx + dy*dy <= rangeSq) {
-                            tTarget.id = c.id;
-                            break;
-                        }
-                    }
-            }
-        }
-}
-    void Element::shooting_system() const {
-        static const Mask towerMask = MaskBuilder()
-            .set<Transform>().set<Damage>().set<FireRate>().set<Target>().build();
-        static const Mask creepMask = MaskBuilder()
-            .set<Transform>().set<Creep_Tag>().build();
-
-        constexpr float BULLET_SPEED = 300.f; // px/sec
-
-        for (ent_type t{0}; t.id <= World::maxId().id; ++t.id) {
-            if (!World::mask(t).test(towerMask)) continue;
-            auto &fr  = World::getComponent<FireRate>(t);
-            auto &tgt = World::getComponent<Target>(t);
-
-            // עדכון טיימר ירי
-            if (fr.timeLeft > 0.f) {
-                fr.timeLeft -= DT;
-                continue;
-            }
-            if (tgt.id == -1) continue;
-
-            ent_type creep{tgt.id};
-            if (!World::mask(creep).test(creepMask)) {
-                tgt.id = -1;
-                continue;
-            }
-
-            // חישוב וקטור ותזוזה
-            const auto &src = World::getComponent<Transform>(t).p;
-            const auto &dst = World::getComponent<Transform>(creep).p;
-            float dx = dst.x - src.x;
-            float dy = dst.y - src.y;
-            float dist = SDL_sqrtf(dx*dx + dy*dy);
-            if (dist < 1e-4f) dist = 1.f;
-
-            SDL_FPoint vel{ dx/dist * BULLET_SPEED,
-                            dy/dist * BULLET_SPEED };
-            float angDeg = SDL_atan2f(dy, dx) * RAD_TO_DEG;
-            float travelTime = dist / BULLET_SPEED;
-
-            // יצירת קליע עם TravelTime, Damage ו־Target
-            Entity bullet = Entity::create();
-            bullet.addAll(
-                Transform{ src, angDeg },
-                Drawable{ BULLET_TEX, {sprite_proj_arrow.w*TEX_SCALE, sprite_proj_arrow.h*TEX_SCALE} },
-                Velocity{ vel },
-                TravelTime{ travelTime },
-                Damage{ World::getComponent<Damage>(t).value },
-                Target{ tgt.id },
-                Bullet_Tag{}
-            );
-
-            fr.timeLeft = fr.interval;
-        }
-    }
-
-//=========================
-// BULLET DAMAGE SYSTEM    (פגיעה והשמדה)
-//=========================
-void Element::damage_system() const {
-    static const Mask bulletMask = MaskBuilder()
-        .set<Transform>().set<Damage>().set<Target>().set<Bullet_Tag>().build();
-    static const Mask creepMask = MaskBuilder()
-        .set<Transform>().set<HP>().set<Creep_Tag>().build();
-
-    constexpr float HIT_RADIUS_SQ = 25.f;  // 5px²
-
-    for (ent_type b{0}; b.id <= World::maxId().id; ++b.id)
-        if (World::mask(b).test(bulletMask)) {
-            auto &tgt = World::getComponent<Target>(b);
-            if (tgt.id == -1) { World::destroyEntity(b); continue; }
-            ent_type creep{ tgt.id };
-            if (!World::mask(creep).test(creepMask)) { World::destroyEntity(b); continue; }
-
-            const auto &bp = World::getComponent<Transform>(b).p;
-            const auto &cp = World::getComponent<Transform>(creep).p;
-            float dx = bp.x - cp.x;
-            float dy = bp.y - cp.y;
-            if (dx*dx + dy*dy <= HIT_RADIUS_SQ) {
-                auto &hp = World::getComponent<HP>(creep);
-                hp.current -= World::getComponent<Damage>(b).value;
-                if (hp.current <= 0) World::destroyEntity(creep);
-                World::destroyEntity(b);
-            }
-        }
-}
-
-    void Element::bullet_hit_system() const {
-        static const Mask mask = MaskBuilder()
-            .set<Bullet_Tag>()
-            .set<TravelTime>()
-            .set<Target>()
-            .set<Damage>()
-            .build();
-        static const Mask creepMask = MaskBuilder()
-            .set<Transform>()
-            .set<HP>()
-            .set<Creep_Tag>()
-            .build();
-
-        for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
-            if (!World::mask(b).test(mask)) continue;
-            auto &tt = World::getComponent<TravelTime>(b);
-            tt.timeLeft -= DT;
-            if (tt.timeLeft > 0.f) continue;
-
-            int targetId = World::getComponent<Target>(b).id;
-            ent_type creep{targetId};
-            if (World::mask(creep).test(creepMask)) {
-                auto &hp = World::getComponent<HP>(creep);
-                hp.current -= World::getComponent<Damage>(b).value;
-                if (hp.current <= 0)
-                    World::destroyEntity(creep);
-            }
-
-            World::destroyEntity(b);
-        }
-    }
-
-
     void Element::draw_system() const {
         static const Mask mask = MaskBuilder()
                 .set<Transform>() // where to draw
@@ -681,23 +579,12 @@ void Element::damage_system() const {
 
     /// game
     Element::Element() {
-        if (!prepareWindowAndTexture())
-            return;
-
-        createMap();
-
-        createBuyArrow();
-        createBuyCannon();
-        createBuyAir();
-        createNextLevelButton();
-
+        if (!prepareWindowAndTexture()) return;
+        createUI();
         createPlayer();
         createMouse();
-        createGameState(); // sets up CurrentLevel{0}
-        createSpawnManager(); // sets up SpawnState for WAVE[0]
-
-        createTower(200, 200, 0.0f, 200, 5, 0.2f, TOWER_TEX_AIR );
-        createTower(400, 400, 0.0f, 200, 5, 0.2f, TOWER_TEX_AIR );
+        createGameState();
+        createSpawnManager();
     }
 
     Element::~Element() {
@@ -717,17 +604,14 @@ void Element::damage_system() const {
         while (true) {
             input_system();
             ui_system();
+            placing_tower_system();
 
             wave_system();
             path_navigation_system();
             movement_system();
 
-            targeting_system();
-            shooting_system();
-            damage_system();
-            bullet_hit_system();
-
-
+            //targeting_system
+            //damage_system
             endpoint_system();
             draw_system();
 
