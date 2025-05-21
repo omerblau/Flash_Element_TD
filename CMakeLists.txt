@@ -12,11 +12,6 @@ add_executable(
         bagel.h
         tests.cpp
         bagel_cfg.h
-        fetd.cpp
-        fetd.h
-        game.cpp
-        game.h
-        pong.cpp
         element.cpp
         element.h
 )

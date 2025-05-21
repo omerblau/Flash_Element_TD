@@ -1,5 +1,4 @@
 #include "Element.h"
-#include "bagel.h"
 
 #include <iostream>
 #include <string>
@@ -7,8 +6,9 @@
 #include <SDL3_image/SDL_image.h>
 #include <algorithm> // for std::clamp
 
-
 using namespace std;
+
+#include "bagel.h"
 using namespace bagel;
 
 
@@ -167,7 +167,7 @@ namespace element {
         );
     }
     void Element::createBullet(const SDL_FPoint &src, const SDL_FPoint &dst,
-                               int damage, ent_type targetId) const {
+                               int damage, int targetId) const {
         // compute direction & travel time
         float dx = dst.x - src.x;
         float dy = dst.y - src.y;
@@ -198,7 +198,7 @@ namespace element {
 
 
     /// systems
-    void Element::input_system() {
+    void Element::input_system() const {
         static const Mask mouseMask = MaskBuilder()
                 .set<Mouse_Tag>()
                 .set<MouseInput>()
@@ -631,11 +631,11 @@ namespace element {
             float rangeSq = range * range;
 
             // 1) If we already have a target, check if it's still valid
-            if (tgt.id.id != -1) {
+            if (tgt.id != -1) {
                 ent_type old{tgt.id};
                 if (!World::mask(old).test(creepMask)) {
                     // died or despawned
-                    tgt.id.id = -1;
+                    tgt.id = -1;
                 } else {
                     // still alive: is it still in range?
                     const auto &cp = World::getComponent<Transform>(old).p;
@@ -643,13 +643,13 @@ namespace element {
                     float dy = cp.y - tp.y;
                     if (dx * dx + dy * dy > rangeSq) {
                         // out of range
-                        tgt.id.id = -1;
+                        tgt.id = -1;
                     }
                 }
             }
 
             // 2) If no valid target, search for the *furthest-along* creep in range
-            if (tgt.id.id == -1) {
+            if (tgt.id == -1) {
                 float bestScore = -1.0f;
                 ent_type best{-1};
 
@@ -671,7 +671,7 @@ namespace element {
                     }
                 }
 
-                tgt.id = best; // ent_type{-1} if no creep found
+                tgt.id = best.id; // ent_type{-1} if no creep found
             }
         }
     }
@@ -700,11 +700,11 @@ namespace element {
                 continue;
             }
             // 2) No valid target?
-            if (tgt.id.id == -1) continue;
+            if (tgt.id == -1) continue;
 
             ent_type creep{tgt.id};
             if (!World::mask(creep).test(creepMask)) {
-                tgt.id.id = -1;
+                tgt.id = -1;
                 continue;
             }
 
@@ -712,7 +712,7 @@ namespace element {
             const auto &srcPt = World::getComponent<Transform>(t).p;
             const auto &dstPt = World::getComponent<Transform>(creep).p;
             int dmg = World::getComponent<Damage>(t).value;
-            ent_type tid = tgt.id;
+            int tid = tgt.id;
 
             // 4) Spawn the bullet
             createBullet(srcPt, dstPt, dmg, tid);

@@ -1,16 +1,14 @@
 #pragma once
 #include <SDL3/SDL.h>
 #include "res/atlas.h"
-#include "bagel.h"
 
+#define FRECT(s) SDL_FRect{ (s).x, (s).y, (s).w, (s).h }
+
+// @formatter:off
 namespace element {
-    enum class UIAction {
-        None, BuyArrow, BuyCannon, BuyAir,
-        NextLevel,
-    };
+    enum class UIAction {None, BuyArrow, BuyCannon, BuyAir, NextLevel};
 
     /// components
-    // @formatter:off              //  components
     using Transform = struct {SDL_FPoint p; float a;};
     using Drawable = struct {SDL_FRect part; SDL_FPoint size;};
     using Gold = struct {int current;};
@@ -26,7 +24,7 @@ namespace element {
     using Range = struct {float value;};
     using Damage = struct {int value;};
     using FireRate = struct {float interval; float timeLeft;};
-    using Target = struct {bagel::ent_type id;};
+    using Target = struct {int id;};
     using TravelTime = struct {float travelTime;};
 
     /// Tags
@@ -52,54 +50,48 @@ namespace element {
         static constexpr float MAP_TEX_PAD_X = 20.0f;
         static constexpr float MAP_TEX_PAD_Y = 20.0f;
         static constexpr float TEX_SCALE = 1.8f;
-        static constexpr float PAD = 0.f;
 
         static constexpr SDL_FRect SHEEP_TEX = {
-            sprite_1.x + PAD + 5, sprite_1.y + PAD, sprite_1.w - 2 * PAD, sprite_1.h - 2 * PAD
-        };
+            sprite_1.x + 5, sprite_1.y, sprite_1.w, sprite_1.h};
         static constexpr SDL_FRect RABID_TEX = {
-            sprite_2.x + PAD + 5, sprite_2.y + PAD, sprite_2.w - 2 * PAD, sprite_2.h - 2 * PAD
-        };
+            sprite_2.x + 5, sprite_2.y+5, sprite_2.w, sprite_2.h};
 
     private:
         /// init helpers
         bool prepareWindowAndTexture();
-
+        //uis
         void createMap() const;
         void createBuyArrow() const;
         void createBuyCannon() const;
         void createBuyAir() const;
         void createNextLevelButton() const;
         void createUI() const;
-
+        //game management
         void createMouse() const;
         void createPlayer() const;
         void createGameState() const;
-
         void createSpawnManager() const;
+        //factories
         void createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const;
         void createTower(float x, float y, float range, int healthDamage,
                              float fire_rate, SDL_FRect spriteRect) const;
         void createBullet(const SDL_FPoint &src, const SDL_FPoint &dst,
-                                int damage, bagel::ent_type targetId) const;
+                                int damage, int targetId) const;
 
         /// systems
-        void input_system();
-        void ui_system() const;
-        void path_navigation_system() const;// sets Velocity + WaypointIndex
-        void movement_system() const;       // applies Velocity to Transform
-        void endpoint_system() const;
-        void placing_tower_system() const;
-        void wave_system() const;
-        void print_status_bar() const; //helper for draw
-        void targeting_system() const;
-
-        void shooting_system() const;
-        void homing_system() const;
-
-        void bullet_hit_system() const;
-
-        void draw_system() const;
+        void input_system()             const;
+        void ui_system()                const;
+        void path_navigation_system()   const;
+        void movement_system()          const;
+        void endpoint_system()          const;
+        void placing_tower_system()     const;
+        void wave_system()              const;
+        void print_status_bar()         const;
+        void targeting_system()         const;
+        void shooting_system()          const;
+        void homing_system()            const;
+        void bullet_hit_system()        const;
+        void draw_system()              const;
 
         static constexpr int WIN_WIDTH = 1280;
         static constexpr int WIN_HEIGHT = 800;
@@ -109,32 +101,17 @@ namespace element {
         static constexpr float GAME_FRAME = 1000.f / FPS;
         static constexpr float RAD_TO_DEG = 57.2958f;
 
-        static constexpr SDL_FRect MAP_TEX =        {sprite_map.x, sprite_map.y, sprite_map.w, sprite_map.h};
-        static constexpr SDL_FRect UI_NEXT_LEVEL =  {sprite_ui_next_level.x, sprite_ui_next_level.y, sprite_ui_next_level.w, sprite_ui_next_level.h};
-        static constexpr SDL_FRect BUY_ARROW_TEX =  {sprite_buy_arrow.x, sprite_buy_arrow.y, sprite_buy_arrow.w, sprite_buy_arrow.h};
-        static constexpr SDL_FRect BUY_CANNON_TEX = {sprite_buy_cannon.x, sprite_buy_cannon.y, sprite_buy_cannon.w, sprite_buy_cannon.h};
-        static constexpr SDL_FRect BUY_AIR_TEX =    {sprite_buy_air.x, sprite_buy_air.y, sprite_buy_air.w, sprite_buy_air.h};
+        static constexpr SDL_FRect MAP_TEX              = FRECT(sprite_map);
+        static constexpr SDL_FRect UI_NEXT_LEVEL        = FRECT(sprite_ui_next_level);
+        static constexpr SDL_FRect BUY_ARROW_TEX        = FRECT(sprite_buy_arrow);
+        static constexpr SDL_FRect BUY_CANNON_TEX       = FRECT(sprite_buy_cannon);
+        static constexpr SDL_FRect BUY_AIR_TEX          = FRECT(sprite_buy_air);
 
-        static constexpr SDL_FRect SPRITE_HOVER = {sprite_ui_can_place_tower.x, sprite_ui_can_place_tower.y, sprite_ui_can_place_tower.w, sprite_ui_can_place_tower.h};
-        static constexpr SDL_FRect SPRITE_HOVER_CANT_PLACE = {sprite_ui_cant_place_tower.x, sprite_ui_cant_place_tower.y, sprite_ui_cant_place_tower.w, sprite_ui_cant_place_tower.h};
+        static constexpr SDL_FRect TOWER_TEX_AIR        = FRECT(sprite_tower_air);
+        static constexpr SDL_FRect TOWER_TEX_ARROW      = FRECT(sprite_tower_arrow);
+        static constexpr SDL_FRect TOWER_TEX_CANNON     = FRECT(sprite_tower_cannon_1);
 
-
-        static constexpr SDL_FRect TOWER_TEX_AIR = {
-            sprite_tower_air.x , sprite_tower_air.y, sprite_tower_air.w , sprite_tower_air.h
-        };
-        static constexpr SDL_FRect TOWER_TEX_ARROW = {
-            sprite_tower_arrow.x , sprite_tower_arrow.y, sprite_tower_arrow.w , sprite_tower_arrow.h
-        };
-
-        static constexpr SDL_FRect TOWER_TEX_CANNON = {
-            sprite_tower_cannon_1.x , sprite_tower_cannon_1.y, sprite_tower_cannon_1.w , sprite_tower_cannon_1.h
-        };
-
-
-        static constexpr SDL_FRect BULLET_TEX = {
-            sprite_proj_cannon.x , sprite_proj_cannon.y, sprite_proj_cannon.w , sprite_proj_cannon.h
-        };
-
+        static constexpr SDL_FRect BULLET_TEX           = FRECT(sprite_proj_cannon);
 
 
         SDL_Window *win = nullptr;
@@ -183,9 +160,7 @@ namespace element {
     // -----------------------------------------------------------------------------
 
 
-    ///------------------------------------------------------------------------
     /// Wave config (static data, not ECS components)
-    ///------------------------------------------------------------------------
     struct Wave {
         int count; // how many to spawn
         float delay; // seconds between spawns
@@ -200,8 +175,4 @@ namespace element {
         {20, 0.5f, 120.f, 20, 3, Element::RABID_TEX}
     };
     static constexpr int WAVE_COUNT = sizeof(WAVES) / sizeof(WAVES[0]);
-
-    ///------------------------------------------------------------------------
-    /// Your ECS components and Element class
-    ///------------------------------------------------------------------------
 }
