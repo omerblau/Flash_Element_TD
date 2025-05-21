@@ -437,6 +437,180 @@ namespace element {
         intent.action = UIAction::None;
     }
 
+
+
+    // קומפוננט חדש לשעון נסיעה של קליע
+    struct TravelTime { float timeLeft; };
+
+
+
+
+
+
+//=========================
+// TOWER TARGETING SYSTEM
+//=========================
+void Element::targeting_system() const {
+    static const Mask towerMask = MaskBuilder()
+        .set<Transform>().set<Range>().set<Target>().build();
+    static const Mask creepMask = MaskBuilder()
+        .set<Transform>().set<Creep_Tag>().build();
+
+    for (ent_type t{0}; t.id <= World::maxId().id; ++t.id)
+        if (World::mask(t).test(towerMask)) {
+            auto &tTarget = World::getComponent<Target>(t);
+            const auto &tPos = World::getComponent<Transform>(t).p;
+            const float tRange = World::getComponent<Range>(t).value;
+            const float rangeSq = tRange * tRange;
+
+            //   ▸ 1. אם יש מטרה – ודא שהיא חיה ובטווח
+            if (tTarget.id != -1) {
+                ent_type creep{tTarget.id};
+                if (!World::mask(creep).test(creepMask)) {
+                    tTarget.id = -1;               // מת / נעלם
+                } else {
+                    const auto &cPos = World::getComponent<Transform>(creep).p;
+                    float dx = tPos.x - cPos.x;
+                    float dy = tPos.y - cPos.y;
+                    if (dx*dx + dy*dy > rangeSq)
+                        tTarget.id = -1;           // יצא מטווח
+                }
+            }
+
+            //   ▸ 2. אין מטרה – מצא קריפ ראשון שנכנס לטווח
+            if (tTarget.id == -1) {
+                for (ent_type c{0}; c.id <= World::maxId().id; ++c.id)
+                    if (World::mask(c).test(creepMask)) {
+                        const auto &cPos = World::getComponent<Transform>(c).p;
+                        float dx = tPos.x - cPos.x;
+                        float dy = tPos.y - cPos.y;
+                        if (dx*dx + dy*dy <= rangeSq) {
+                            tTarget.id = c.id;
+                            break;
+                        }
+                    }
+            }
+        }
+}
+    void Element::shooting_system() const {
+        static const Mask towerMask = MaskBuilder()
+            .set<Transform>().set<Damage>().set<FireRate>().set<Target>().build();
+        static const Mask creepMask = MaskBuilder()
+            .set<Transform>().set<Creep_Tag>().build();
+
+        constexpr float BULLET_SPEED = 300.f; // px/sec
+
+        for (ent_type t{0}; t.id <= World::maxId().id; ++t.id) {
+            if (!World::mask(t).test(towerMask)) continue;
+            auto &fr  = World::getComponent<FireRate>(t);
+            auto &tgt = World::getComponent<Target>(t);
+
+            // עדכון טיימר ירי
+            if (fr.timeLeft > 0.f) {
+                fr.timeLeft -= DT;
+                continue;
+            }
+            if (tgt.id == -1) continue;
+
+            ent_type creep{tgt.id};
+            if (!World::mask(creep).test(creepMask)) {
+                tgt.id = -1;
+                continue;
+            }
+
+            // חישוב וקטור ותזוזה
+            const auto &src = World::getComponent<Transform>(t).p;
+            const auto &dst = World::getComponent<Transform>(creep).p;
+            float dx = dst.x - src.x;
+            float dy = dst.y - src.y;
+            float dist = SDL_sqrtf(dx*dx + dy*dy);
+            if (dist < 1e-4f) dist = 1.f;
+
+            SDL_FPoint vel{ dx/dist * BULLET_SPEED,
+                            dy/dist * BULLET_SPEED };
+            float angDeg = SDL_atan2f(dy, dx) * RAD_TO_DEG;
+            float travelTime = dist / BULLET_SPEED;
+
+            // יצירת קליע עם TravelTime, Damage ו־Target
+            Entity bullet = Entity::create();
+            bullet.addAll(
+                Transform{ src, angDeg },
+                Drawable{ BULLET_TEX, {sprite_proj_arrow.w*TEX_SCALE, sprite_proj_arrow.h*TEX_SCALE} },
+                Velocity{ vel },
+                TravelTime{ travelTime },
+                Damage{ World::getComponent<Damage>(t).value },
+                Target{ tgt.id },
+                Bullet_Tag{}
+            );
+
+            fr.timeLeft = fr.interval;
+        }
+    }
+
+//=========================
+// BULLET DAMAGE SYSTEM    (פגיעה והשמדה)
+//=========================
+void Element::damage_system() const {
+    static const Mask bulletMask = MaskBuilder()
+        .set<Transform>().set<Damage>().set<Target>().set<Bullet_Tag>().build();
+    static const Mask creepMask = MaskBuilder()
+        .set<Transform>().set<HP>().set<Creep_Tag>().build();
+
+    constexpr float HIT_RADIUS_SQ = 25.f;  // 5px²
+
+    for (ent_type b{0}; b.id <= World::maxId().id; ++b.id)
+        if (World::mask(b).test(bulletMask)) {
+            auto &tgt = World::getComponent<Target>(b);
+            if (tgt.id == -1) { World::destroyEntity(b); continue; }
+            ent_type creep{ tgt.id };
+            if (!World::mask(creep).test(creepMask)) { World::destroyEntity(b); continue; }
+
+            const auto &bp = World::getComponent<Transform>(b).p;
+            const auto &cp = World::getComponent<Transform>(creep).p;
+            float dx = bp.x - cp.x;
+            float dy = bp.y - cp.y;
+            if (dx*dx + dy*dy <= HIT_RADIUS_SQ) {
+                auto &hp = World::getComponent<HP>(creep);
+                hp.current -= World::getComponent<Damage>(b).value;
+                if (hp.current <= 0) World::destroyEntity(creep);
+                World::destroyEntity(b);
+            }
+        }
+}
+
+    void Element::bullet_hit_system() const {
+        static const Mask mask = MaskBuilder()
+            .set<Bullet_Tag>()
+            .set<TravelTime>()
+            .set<Target>()
+            .set<Damage>()
+            .build();
+        static const Mask creepMask = MaskBuilder()
+            .set<Transform>()
+            .set<HP>()
+            .set<Creep_Tag>()
+            .build();
+
+        for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
+            if (!World::mask(b).test(mask)) continue;
+            auto &tt = World::getComponent<TravelTime>(b);
+            tt.timeLeft -= DT;
+            if (tt.timeLeft > 0.f) continue;
+
+            int targetId = World::getComponent<Target>(b).id;
+            ent_type creep{targetId};
+            if (World::mask(creep).test(creepMask)) {
+                auto &hp = World::getComponent<HP>(creep);
+                hp.current -= World::getComponent<Damage>(b).value;
+                if (hp.current <= 0)
+                    World::destroyEntity(creep);
+            }
+
+            World::destroyEntity(b);
+        }
+    }
+
+
     void Element::draw_system() const {
         static const Mask mask = MaskBuilder()
                 .set<Transform>() // where to draw
@@ -522,15 +696,8 @@ namespace element {
         createGameState(); // sets up CurrentLevel{0}
         createSpawnManager(); // sets up SpawnState for WAVE[0]
 
-        createTower(
-    20 * CELL_SIZE,        // x במפת-מקור  (≈ 200px לפני Scale/Pad)
-    20 * CELL_SIZE,        // y
-    0.0f,                  // אין סיבוב התחלתי
-    4 * CELL_SIZE,         // Range = 4 תאים
-    3,                     // Damage = 3 HP
-    0.5f,                  // fire-rate: ירייה כל חצי שנייה
-    TOWER_TEX_AIR              // SDL_FRect של הספְרייט
-);
+        createTower(200, 200, 0.0f, 200, 5, 0.2f, TOWER_TEX_AIR );
+        createTower(400, 400, 0.0f, 200, 5, 0.2f, TOWER_TEX_AIR );
     }
 
     Element::~Element() {
@@ -555,8 +722,12 @@ namespace element {
             path_navigation_system();
             movement_system();
 
-            //targeting_system
-            //damage_system
+            targeting_system();
+            shooting_system();
+            damage_system();
+            bullet_hit_system();
+
+
             endpoint_system();
             draw_system();
 
