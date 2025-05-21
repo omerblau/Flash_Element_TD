@@ -1,6 +1,7 @@
 #include "Element.h"
 
 #include <iostream>
+#include <limits>
 #include <string>
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
@@ -220,11 +221,11 @@ namespace element {
             if (e.type == SDL_EVENT_QUIT) exit(0);
 
             if (e.type == SDL_EVENT_MOUSE_MOTION) {
-                mi.x = e.motion.x;
-                mi.y = e.motion.y;
+                mi.x = static_cast<int>(e.motion.x);
+                mi.y = static_cast<int>(e.motion.y);
             } else if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-                mi.x = e.button.x;
-                mi.y = e.button.y;
+                mi.x = static_cast<int>(e.button.x);
+                mi.y = static_cast<int>(e.button.y);
                 mi.clicked = true;
             }
 
@@ -279,11 +280,13 @@ namespace element {
             float top    = t.p.y - d.size.y/2;
             float bottom = t.p.y + d.size.y/2;
 
-            if (mi.x < left || mi.x > right || mi.y < top || mi.y > bottom)
+            if ( static_cast<float>(mi.x) < left
+              || static_cast<float>(mi.x) > right
+              || static_cast<float>(mi.y) < top
+              || static_cast<float>(mi.y) > bottom )
                 continue;
 
             const Mask &m = World::mask(b);
-            // if      (m.test(Component<Arrow_Tag>::Bit))       intent.action = UIAction::BuyArrow;
             if      (m.test(Component<Arrow_Tag>::Bit))       intent.action = UIAction::BuyArrow;
             else if (m.test(Component<Cannon_Tag>::Bit))      intent.action = UIAction::BuyCannon;
             else if (m.test(Component<Air_Tag>::Bit))         intent.action = UIAction::BuyAir;
@@ -620,7 +623,7 @@ namespace element {
                 .set<WaypointIndex>()
                 .build();
 
-        // For each tower...
+        // For each tower…
         for (ent_type t{0}; t.id <= World::maxId().id; ++t.id) {
             if (!World::mask(t).test(towerMask))
                 continue;
@@ -630,48 +633,60 @@ namespace element {
             float range = World::getComponent<Range>(t).value;
             float rangeSq = range * range;
 
-            // 1) If we already have a target, check if it's still valid
+            // 1) If we already have a target, check validity
             if (tgt.id != -1) {
                 ent_type old{tgt.id};
                 if (!World::mask(old).test(creepMask)) {
-                    // died or despawned
                     tgt.id = -1;
                 } else {
-                    // still alive: is it still in range?
                     const auto &cp = World::getComponent<Transform>(old).p;
-                    float dx = cp.x - tp.x;
-                    float dy = cp.y - tp.y;
-                    if (dx * dx + dy * dy > rangeSq) {
-                        // out of range
+                    float dx = cp.x - tp.x, dy = cp.y - tp.y;
+                    if (dx * dx + dy * dy > rangeSq)
                         tgt.id = -1;
-                    }
                 }
             }
 
-            // 2) If no valid target, search for the *furthest-along* creep in range
+            // 2) If no valid target, search for the furthest‐along creep in range
             if (tgt.id == -1) {
                 float bestScore = -1.0f;
-                ent_type best{-1};
+                float bestSubDist = std::numeric_limits<float>::infinity();
+                ent_type bestCreep = ent_type{-1};
 
                 for (ent_type c{0}; c.id <= World::maxId().id; ++c.id) {
                     if (!World::mask(c).test(creepMask))
                         continue;
 
                     const auto &cp = World::getComponent<Transform>(c).p;
-                    float dx = cp.x - tp.x;
-                    float dy = cp.y - tp.y;
+                    float dx = cp.x - tp.x, dy = cp.y - tp.y;
                     if (dx * dx + dy * dy > rangeSq)
-                        continue; // out of this tower's range
+                        continue;
 
-                    // use waypoint index as progress metric
                     int idx = World::getComponent<WaypointIndex>(c).idx;
-                    if (idx > bestScore) {
-                        bestScore = static_cast<float>(idx);
-                        best = c;
+                    float score = static_cast<float>(idx);
+
+                    if (score > bestScore) {
+                        // strictly better index
+                        bestScore = score;
+                        bestCreep = c;
+                        // compute distance squared to the *next* waypoint
+                        const auto &nx = TURNS[idx].x;
+                        const auto &ny = TURNS[idx].y;
+                        float sx = nx - cp.x, sy = ny - cp.y;
+                        bestSubDist = sx * sx + sy * sy;
+                    } else if (score == bestScore) {
+                        // tie: pick the one closer to next waypoint
+                        const auto &nx = TURNS[idx].x;
+                        const auto &ny = TURNS[idx].y;
+                        float sx = nx - cp.x, sy = ny - cp.y;
+                        float subDist = sx * sx + sy * sy;
+                        if (subDist < bestSubDist) {
+                            bestSubDist = subDist;
+                            bestCreep = c;
+                        }
                     }
                 }
 
-                tgt.id = best.id; // ent_type{-1} if no creep found
+                tgt.id = bestCreep.id;
             }
         }
     }
@@ -842,11 +857,12 @@ namespace element {
             movement_system();
             draw_system();
 
-            auto end = SDL_GetTicks();
-            if (end - start < GAME_FRAME) {
-                SDL_Delay(GAME_FRAME - (end - start));
+            const auto end = SDL_GetTicks();
+            if (const auto elapsed = end - start;
+                static_cast<float>(elapsed) < GAME_FRAME) {
+                SDL_Delay(static_cast<Uint32>(GAME_FRAME - static_cast<float>(elapsed)));
             }
-            start += GAME_FRAME;
+            start += static_cast<Uint64>(GAME_FRAME);
         }
     }
 }
