@@ -13,9 +13,7 @@ using namespace bagel;
 
 
 namespace element {
-    //------------------------------------------------------------------------------
     // helper to find the first entity matching a mask
-    //------------------------------------------------------------------------------
     static ent_type findEntity(const Mask &mask) {
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
             if (World::mask(e).test(mask))
@@ -23,6 +21,8 @@ namespace element {
         }
         return ent_type{-1};
     }
+
+    constexpr float BULLET_SPEED = 600.f; // px/sec
 
     /// init helpers  // @formatter:off
     bool Element::prepareWindowAndTexture() {
@@ -154,11 +154,11 @@ namespace element {
             Creep_Tag{}
         );
     }
-    void Element::createTower(float x, float y, float a, float range, int healthDamage,
+    void Element::createTower(float x, float y, float range, int healthDamage,
                              float fire_rate, SDL_FRect spriteRect) const {
         Entity creepEntity = Entity::create();
         creepEntity.addAll(
-            Transform{{x, y}, a},
+            Transform{{x, y}, 0.f},
             Drawable{spriteRect, {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE}},
             Range {range},
             Damage {healthDamage},
@@ -166,10 +166,35 @@ namespace element {
             Target {-1}
         );
     }
+    void Element::createBullet(const SDL_FPoint &src, const SDL_FPoint &dst,
+                               int damage, ent_type targetId) const {
+        // compute direction & travel time
+        float dx = dst.x - src.x;
+        float dy = dst.y - src.y;
+        float dist = SDL_sqrtf(dx * dx + dy * dy);
+        if (dist < 1e-4f) dist = 1.f;
+
+        SDL_FPoint vel{
+            dx / dist * BULLET_SPEED,
+            dy / dist * BULLET_SPEED
+        };
+
+        float angDeg = SDL_atan2f(dy, dx) * RAD_TO_DEG;
+        float travelTime = dist / BULLET_SPEED;
+
+        // now spawn the bullet entity
+        Entity b = Entity::create();
+        b.addAll(
+            Transform{src, angDeg},
+            Drawable{BULLET_TEX, {BULLET_TEX.w * TEX_SCALE, BULLET_TEX.h * TEX_SCALE}},
+            Velocity{vel},
+            TravelTime{travelTime},
+            Damage{damage},
+            Target{targetId},
+            Bullet_Tag{}
+        );
+    }
     // @formatter:on
-
-
-    struct TravelTime { float timeLeft; };
 
 
     /// systems
@@ -346,7 +371,6 @@ namespace element {
                 .set<Transform>()
                 .set<Drawable>()
                 .build();
-
         static const Mask intentMask = MaskBuilder()
                 .set<GameState_Tag>()
                 .set<UIIntent>()
@@ -388,15 +412,16 @@ namespace element {
             float mapTop = MAP_TEX_PAD_Y;
             float mapBottom = MAP_TEX_PAD_Y + MAP_TEX.h * TEX_SCALE;
 
-            if (mx >= mapLeft && mx <= mapRight && my >= mapTop && my <= mapBottom) {
-                // spawn real tower at mouse
-                float angle = 0.f; // adjust as needed
-                float range = 4.f; // example
-                int dmg = 3; // example
-                float rate = 0.5f; // example
-                createTower(mx, my, angle, range, dmg, rate, spriteRect);
 
-                // consume the intent
+            if (mx >= mapLeft && mx <= mapRight && my >= mapTop && my <= mapBottom) {
+                if (intent.action == UIAction::BuyArrow) {
+                    createTower(mx, my, 200, 6, 0.5, spriteRect);
+                } else if (intent.action == UIAction::BuyCannon) {
+                    createTower(mx, my, 100, 10, 2, spriteRect);
+                } else if (intent.action == UIAction::BuyAir) {
+                    createTower(mx, my, 400, 3, 0.1, spriteRect);
+                }
+
                 intent.action = UIAction::None;
                 // clear ghost
                 mouseD.part = SDL_FRect{};
@@ -580,178 +605,199 @@ namespace element {
                 << std::endl;
     }
 
+    void Element::targeting_system() const {
+        // Mask for towers that can target
+        static const Mask towerMask = MaskBuilder()
+                .set<Transform>()
+                .set<Range>()
+                .set<Target>()
+                .build();
 
+        // Mask for alive creeps with a known waypoint
+        static const Mask creepMask = MaskBuilder()
+                .set<Creep_Tag>()
+                .set<Transform>()
+                .set<WaypointIndex>()
+                .build();
 
+        // For each tower...
+        for (ent_type t{0}; t.id <= World::maxId().id; ++t.id) {
+            if (!World::mask(t).test(towerMask))
+                continue;
 
-//=========================
-// TOWER TARGETING SYSTEM
-//=========================
-void Element::targeting_system() const {
-    static const Mask towerMask = MaskBuilder()
-        .set<Transform>().set<Range>().set<Target>().build();
-    static const Mask creepMask = MaskBuilder()
-        .set<Transform>().set<Creep_Tag>().build();
+            auto &tgt = World::getComponent<Target>(t);
+            const auto &tp = World::getComponent<Transform>(t).p;
+            float range = World::getComponent<Range>(t).value;
+            float rangeSq = range * range;
 
-    for (ent_type t{0}; t.id <= World::maxId().id; ++t.id)
-        if (World::mask(t).test(towerMask)) {
-            auto &tTarget = World::getComponent<Target>(t);
-            const auto &tPos = World::getComponent<Transform>(t).p;
-            const float tRange = World::getComponent<Range>(t).value;
-            const float rangeSq = tRange * tRange;
-
-            //   ▸ 1. אם יש מטרה – ודא שהיא חיה ובטווח
-            if (tTarget.id != -1) {
-                ent_type creep{tTarget.id};
-                if (!World::mask(creep).test(creepMask)) {
-                    tTarget.id = -1;               // מת / נעלם
+            // 1) If we already have a target, check if it's still valid
+            if (tgt.id.id != -1) {
+                ent_type old{tgt.id};
+                if (!World::mask(old).test(creepMask)) {
+                    // died or despawned
+                    tgt.id.id = -1;
                 } else {
-                    const auto &cPos = World::getComponent<Transform>(creep).p;
-                    float dx = tPos.x - cPos.x;
-                    float dy = tPos.y - cPos.y;
-                    if (dx*dx + dy*dy > rangeSq)
-                        tTarget.id = -1;           // יצא מטווח
+                    // still alive: is it still in range?
+                    const auto &cp = World::getComponent<Transform>(old).p;
+                    float dx = cp.x - tp.x;
+                    float dy = cp.y - tp.y;
+                    if (dx * dx + dy * dy > rangeSq) {
+                        // out of range
+                        tgt.id.id = -1;
+                    }
                 }
             }
 
-            //   ▸ 2. אין מטרה – מצא קריפ ראשון שנכנס לטווח
-            if (tTarget.id == -1) {
-                for (ent_type c{0}; c.id <= World::maxId().id; ++c.id)
-                    if (World::mask(c).test(creepMask)) {
-                        const auto &cPos = World::getComponent<Transform>(c).p;
-                        float dx = tPos.x - cPos.x;
-                        float dy = tPos.y - cPos.y;
-                        if (dx*dx + dy*dy <= rangeSq) {
-                            tTarget.id = c.id;
-                            break;
-                        }
+            // 2) If no valid target, search for the *furthest-along* creep in range
+            if (tgt.id.id == -1) {
+                float bestScore = -1.0f;
+                ent_type best{-1};
+
+                for (ent_type c{0}; c.id <= World::maxId().id; ++c.id) {
+                    if (!World::mask(c).test(creepMask))
+                        continue;
+
+                    const auto &cp = World::getComponent<Transform>(c).p;
+                    float dx = cp.x - tp.x;
+                    float dy = cp.y - tp.y;
+                    if (dx * dx + dy * dy > rangeSq)
+                        continue; // out of this tower's range
+
+                    // use waypoint index as progress metric
+                    int idx = World::getComponent<WaypointIndex>(c).idx;
+                    if (idx > bestScore) {
+                        bestScore = static_cast<float>(idx);
+                        best = c;
                     }
+                }
+
+                tgt.id = best; // ent_type{-1} if no creep found
             }
         }
-}
+    }
+
     void Element::shooting_system() const {
         static const Mask towerMask = MaskBuilder()
-            .set<Transform>().set<Damage>().set<FireRate>().set<Target>().build();
+                .set<Transform>()
+                .set<Damage>()
+                .set<FireRate>()
+                .set<Target>()
+                .build();
         static const Mask creepMask = MaskBuilder()
-            .set<Transform>().set<Creep_Tag>().build();
-
-        constexpr float BULLET_SPEED = 300.f; // px/sec
+                .set<Transform>()
+                .set<Creep_Tag>()
+                .build();
 
         for (ent_type t{0}; t.id <= World::maxId().id; ++t.id) {
             if (!World::mask(t).test(towerMask)) continue;
-            auto &fr  = World::getComponent<FireRate>(t);
+
+            auto &fr = World::getComponent<FireRate>(t);
             auto &tgt = World::getComponent<Target>(t);
 
-            // עדכון טיימר ירי
+            // 1) Cooldown tick
             if (fr.timeLeft > 0.f) {
                 fr.timeLeft -= DT;
                 continue;
             }
-            if (tgt.id == -1) continue;
+            // 2) No valid target?
+            if (tgt.id.id == -1) continue;
 
             ent_type creep{tgt.id};
             if (!World::mask(creep).test(creepMask)) {
-                tgt.id = -1;
+                tgt.id.id = -1;
                 continue;
             }
 
-            // חישוב וקטור ותזוזה
-            const auto &src = World::getComponent<Transform>(t).p;
-            const auto &dst = World::getComponent<Transform>(creep).p;
-            float dx = dst.x - src.x;
-            float dy = dst.y - src.y;
-            float dist = SDL_sqrtf(dx*dx + dy*dy);
-            if (dist < 1e-4f) dist = 1.f;
+            // 3) Gather parameters
+            const auto &srcPt = World::getComponent<Transform>(t).p;
+            const auto &dstPt = World::getComponent<Transform>(creep).p;
+            int dmg = World::getComponent<Damage>(t).value;
+            ent_type tid = tgt.id;
 
-            SDL_FPoint vel{ dx/dist * BULLET_SPEED,
-                            dy/dist * BULLET_SPEED };
-            float angDeg = SDL_atan2f(dy, dx) * RAD_TO_DEG;
-            float travelTime = dist / BULLET_SPEED;
+            // 4) Spawn the bullet
+            createBullet(srcPt, dstPt, dmg, tid);
 
-            // יצירת קליע עם TravelTime, Damage ו־Target
-            Entity bullet = Entity::create();
-            bullet.addAll(
-                Transform{ src, angDeg },
-                Drawable{ BULLET_TEX, {sprite_proj_arrow.w*TEX_SCALE, sprite_proj_arrow.h*TEX_SCALE} },
-                Velocity{ vel },
-                TravelTime{ travelTime },
-                Damage{ World::getComponent<Damage>(t).value },
-                Target{ tgt.id },
-                Bullet_Tag{}
-            );
-
+            // 5) Reset the fire‐rate timer
             fr.timeLeft = fr.interval;
         }
     }
 
+    void Element::homing_system() const {
+        // Only bullets that still have a Target and a Velocity get updated
+        static const Mask mask = MaskBuilder()
+                .set<Bullet_Tag>()
+                .set<Velocity>()
+                .set<Target>()
+                .build();
+        static const Mask creepMask = MaskBuilder()
+                .set<Creep_Tag>()
+                .set<Transform>()
+                .build();
 
-//=========================
-// BULLET DAMAGE SYSTEM    (פגיעה והשמדה)
-//=========================
-void Element::damage_system() const {
-    static const Mask bulletMask = MaskBuilder()
-        .set<Transform>().set<Damage>().set<Target>().set<Bullet_Tag>().build();
-    static const Mask creepMask = MaskBuilder()
-        .set<Transform>().set<HP>().set<Creep_Tag>().build();
+        // Match the speed you used in createBullet()
+        for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
+            if (!World::mask(b).test(mask)) continue;
 
-    constexpr float HIT_RADIUS_SQ = 25.f;  // 5px²
-
-    for (ent_type b{0}; b.id <= World::maxId().id; ++b.id)
-        if (World::mask(b).test(bulletMask)) {
             auto &tgt = World::getComponent<Target>(b);
-            if (tgt.id == -1) { World::destroyEntity(b); continue; }
-            ent_type creep{ tgt.id };
-            if (!World::mask(creep).test(creepMask)) { World::destroyEntity(b); continue; }
+            auto &vel = World::getComponent<Velocity>(b);
+            const auto &src = World::getComponent<Transform>(b).p;
 
-            const auto &bp = World::getComponent<Transform>(b).p;
-            const auto &cp = World::getComponent<Transform>(creep).p;
-            float dx = bp.x - cp.x;
-            float dy = bp.y - cp.y;
-            if (dx*dx + dy*dy <= HIT_RADIUS_SQ) {
-                auto &hp = World::getComponent<HP>(creep);
-                hp.current -= World::getComponent<Damage>(b).value;
-                if (hp.current <= 0) World::destroyEntity(creep);
+            // If the target’s gone or died, just destroy the bullet
+            ent_type creep{tgt.id};
+            if (!World::mask(creep).test(creepMask)) {
                 World::destroyEntity(b);
+                continue;
             }
+
+            // Re-aim toward the creep’s current position
+            const auto &dst = World::getComponent<Transform>(creep).p;
+            float dx = dst.x - src.x;
+            float dy = dst.y - src.y;
+            float dist = SDL_sqrtf(dx * dx + dy * dy);
+            if (dist < 1e-4f) dist = 1.f;
+
+            vel.v = {
+                dx / dist * BULLET_SPEED,
+                dy / dist * BULLET_SPEED
+            };
         }
-}
-
-
+    }
 
     void Element::bullet_hit_system() const {
         static const Mask mask = MaskBuilder()
-            .set<Bullet_Tag>()
-            .set<TravelTime>()
-            .set<Target>()
-            .set<Damage>()
-            .build();
+                .set<Bullet_Tag>()
+                .set<TravelTime>()
+                .set<Target>()
+                .set<Damage>()
+                .build();
+
         static const Mask creepMask = MaskBuilder()
-            .set<Transform>()
-            .set<HP>()
-            .set<Creep_Tag>()
-            .build();
+                .set<Creep_Tag>()
+                .set<Transform>()
+                .set<HP>()
+                .build();
 
         for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
-            if (!World::mask(b).test(mask)) continue;
-            auto &tt = World::getComponent<TravelTime>(b);
-            tt.timeLeft -= DT;
-            if (tt.timeLeft > 0.f) continue;
+            if (!World::mask(b).test(mask))
+                continue;
 
-            int targetId = World::getComponent<Target>(b).id;
-            ent_type creep{targetId};
+            auto &tt = World::getComponent<TravelTime>(b);
+            tt.travelTime -= DT;
+            if (tt.travelTime > 0.f)
+                continue; // not yet at center
+
+            // now we’ve reached the creep’s center
+            auto &tgt = World::getComponent<Target>(b);
+            ent_type creep{tgt.id};
             if (World::mask(creep).test(creepMask)) {
                 auto &hp = World::getComponent<HP>(creep);
                 hp.current -= World::getComponent<Damage>(b).value;
                 if (hp.current <= 0)
                     World::destroyEntity(creep);
             }
-
             World::destroyEntity(b);
         }
     }
-
-
-
-
 
 
     /// game
@@ -762,10 +808,6 @@ void Element::damage_system() const {
         createMouse();
         createGameState();
         createSpawnManager();
-
-        // דוגמה ליצירת שני מגדלים התחלתיים
-        createTower(200, 200, 0.0f, 200, 5, 0.2f, TOWER_TEX_AIR);
-        createTower(400, 400, 0.0f, 200, 5, 0.2f, TOWER_TEX_AIR);
     }
 
     Element::~Element() {
@@ -789,15 +831,15 @@ void Element::damage_system() const {
 
             wave_system();
             path_navigation_system();
-            movement_system();
+            endpoint_system();
 
             targeting_system();
             shooting_system();
-            damage_system();
+            homing_system();
+            // damage_system();
             bullet_hit_system();
 
-
-            endpoint_system();
+            movement_system();
             draw_system();
 
             auto end = SDL_GetTicks();

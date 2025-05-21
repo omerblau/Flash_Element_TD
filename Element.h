@@ -1,6 +1,7 @@
 #pragma once
 #include <SDL3/SDL.h>
 #include "res/atlas.h"
+#include "bagel.h"
 
 namespace element {
     enum class UIAction {
@@ -25,7 +26,8 @@ namespace element {
     using Range = struct {float value;};
     using Damage = struct {int value;};
     using FireRate = struct {float interval; float timeLeft;};
-    using Target = struct {int id;};
+    using Target = struct {bagel::ent_type id;};
+    using TravelTime = struct {float travelTime;};
 
     /// Tags
     using Creep_Tag = struct {};
@@ -76,8 +78,10 @@ namespace element {
 
         void createSpawnManager() const;
         void createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const;
-        void createTower(float x, float y, float a, float range, int healthDamage,
+        void createTower(float x, float y, float range, int healthDamage,
                              float fire_rate, SDL_FRect spriteRect) const;
+        void createBullet(const SDL_FPoint &src, const SDL_FPoint &dst,
+                                int damage, bagel::ent_type targetId) const;
 
         /// systems
         void input_system();
@@ -91,8 +95,7 @@ namespace element {
         void targeting_system() const;
 
         void shooting_system() const;
-
-        void damage_system() const;
+        void homing_system() const;
 
         void bullet_hit_system() const;
 
@@ -129,7 +132,7 @@ namespace element {
 
 
         static constexpr SDL_FRect BULLET_TEX = {
-            sprite_proj_arrow.x , sprite_proj_arrow.y, sprite_proj_arrow.w , sprite_proj_arrow.h
+            sprite_proj_cannon.x , sprite_proj_cannon.y, sprite_proj_cannon.w , sprite_proj_cannon.h
         };
 
 
