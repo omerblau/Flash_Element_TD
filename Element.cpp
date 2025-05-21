@@ -49,6 +49,34 @@ namespace element {
             return false;
         }
         SDL_DestroySurface(surf);
+
+
+
+        SDL_Surface* ds = IMG_Load("res/digits.png");
+        if (!ds) {
+            std::cerr << "IMG_Load digits.png failed: " << SDL_GetError() << std::endl;
+            return false;
+        }
+        digits = SDL_CreateTextureFromSurface(ren, ds);
+        if (!digits) {
+            std::cerr << "CreateTexture digits failed: " << SDL_GetError() << std::endl;
+            return false;
+        }
+        SDL_DestroySurface(ds);
+
+
+        SDL_Surface* ds2 = IMG_Load("res/HUD.png");
+        if (!ds2) {
+            std::cerr << "HUD.png failed: " << SDL_GetError() << std::endl;
+            return false;
+        }
+        hud = SDL_CreateTextureFromSurface(ren, ds2);
+        if (!hud) {
+            std::cerr << "CreateTexture HUD failed: " << SDL_GetError() << std::endl;
+            return false;
+        }
+        SDL_DestroySurface(ds2);
+
         return true;
     }
     void Element::createMap() const {
@@ -98,12 +126,87 @@ namespace element {
             NextLevel_Tag{}
         );
     }
+    void Element::createCoinIcon() const {
+        // pick a spot in screen‐coords:
+        constexpr float X = 1100.f, Y = 226.f;
+        SDL_FRect src = FRECT(sprite_ui_coin);
+        SDL_FPoint size = { src.w * TEX_SCALE * 1.2f, src.h * TEX_SCALE  * 1.2f};
+
+        Entity e = Entity::create();
+        e.addAll(
+            Transform{{X, Y}, 0.f},
+            Drawable{ src, size },
+            CoinIcon_Tag{}
+        );
+    }
+    void Element::createHealthIcon() const {
+        // pick another spot:
+        constexpr float X = 910.f, Y = 226.f;
+        SDL_FRect src = FRECT(sprite_ui_hp);
+        SDL_FPoint size = { src.w * TEX_SCALE * 2.f, src.h * TEX_SCALE* 2.f };
+
+        Entity e = Entity::create();
+        e.addAll(
+            Transform{{X, Y}, 0.f},
+            Drawable{ src, size },
+            HealthIcon_Tag{}
+        );
+    }
+    void Element::createHUD() const {
+        // Health panel
+        Entity e1 = Entity::create();
+        e1.addAll(
+          Transform{{750.f, 100.f}, 0.f},
+          Drawable{UI_HEALTH_TEX, {UI_HEALTH_TEX.w * TEX_SCALE, UI_HEALTH_TEX.h * TEX_SCALE}},
+          HUD_Tag{}
+        );
+
+        // Money panel
+        Entity e2 = Entity::create();
+        e2.addAll(
+          Transform{{950.f, 100.f}, 0.f},
+          Drawable{UI_MONEY_TEX, {UI_MONEY_TEX.w * TEX_SCALE, UI_MONEY_TEX.h * TEX_SCALE}},
+          HUD_Tag{}
+        );
+
+        // Level panel
+        Entity e3 = Entity::create();
+        e3.addAll(
+          Transform{{1150.f, 100.f}, 0.f},
+          Drawable{UI_LEVEL_TEX, {UI_LEVEL_TEX.w * TEX_SCALE, UI_LEVEL_TEX.h * TEX_SCALE}},
+          HUD_Tag{}
+        );
+    }
     void Element::createUI() const {
         createMap();
         createBuyArrow();
         createBuyCannon();
         createBuyAir();
         createNextLevelButton();
+        createCoinIcon();
+        createHealthIcon();
+        // createHUD();
+    }
+    void Element::createHeaders() const {
+        {
+            // Health
+            SDL_FRect dstH{ 750.f, 100.f,
+                            UI_HEALTH_TEX.w * TEX_SCALE,
+                            UI_HEALTH_TEX.h * TEX_SCALE };
+            SDL_RenderTexture(ren, hud, &UI_HEALTH_TEX, &dstH);
+
+            // Money
+            SDL_FRect dstM{ 950.f, 100.f,
+                            UI_MONEY_TEX.w * TEX_SCALE,
+                            UI_MONEY_TEX.h * TEX_SCALE };
+            SDL_RenderTexture(ren, hud, &UI_MONEY_TEX, &dstM);
+
+            // Level
+            SDL_FRect dstL{1150.f, 100.f,
+                           UI_LEVEL_TEX.w * TEX_SCALE,
+                           UI_LEVEL_TEX.h * TEX_SCALE};
+            SDL_RenderTexture(ren, hud, &UI_LEVEL_TEX, &dstL);
+        }
     }
 
     void Element::createMouse() const {
@@ -127,7 +230,7 @@ namespace element {
         Entity levelEntity = Entity::create();
         levelEntity.addAll(
             GameState_Tag{}, // marks this as the singleton level controller
-            CurrentLevel{0}, // start at wave 0
+            CurrentLevel{1}, // start at wave 0
             UIIntent{}    // starts at None
         );
     }
@@ -477,68 +580,81 @@ namespace element {
         }
     }
 
-    void Element::wave_system() const {
-        // 1) Find SpawnManager singleton
-        static const Mask mgrMask = MaskBuilder()
-                .set<SpawnManager_Tag>()
-                .set<SpawnState>()
-                .build();
-        ent_type mgr{-1};
-        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (World::mask(e).test(mgrMask)) {
-                mgr = e;
-                break;
-            }
+void Element::wave_system() const {
+    // 1) Find SpawnManager singleton
+    static const Mask mgrMask = MaskBuilder()
+            .set<SpawnManager_Tag>()
+            .set<SpawnState>()
+            .build();
+    ent_type mgr{-1};
+    for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+        if (World::mask(e).test(mgrMask)) {
+            mgr = e;
+            break;
         }
-        if (mgr.id == -1) return;
-        auto &st = World::getComponent<SpawnState>(mgr);
-
-        // 2) If we're mid-spawning this wave, continue countdown + spawn
-        if (st.remaining > 0) {
-            const Wave &w = WAVES[st.waveIndex];
-            st.timeLeft -= DT;
-            if (st.timeLeft <= 0.f) {
-                createCreep(w.speed, w.hp, w.gold, w.sprite);
-                st.remaining -= 1;
-                st.timeLeft = w.delay;
-            }
-            return;
-        }
-
-        // no new wave until current one’s creeps are all gone and player clicked
-        // 3) Ensure no creeps remain alive before allowing next-wave click
-        static const Mask creepMask = MaskBuilder().set<Creep_Tag>().build();
-        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (World::mask(e).test(creepMask))
-                return;
-        }
-
-        // 4) Handle NextLevel click to start the next wave
-        static const Mask intentMask = MaskBuilder()
-                .set<GameState_Tag>()
-                .set<UIIntent>()
-                .build();
-        ent_type gs{-1};
-        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-            if (World::mask(e).test(intentMask)) {
-                gs = e;
-                break;
-            }
-        }
-        if (gs.id == -1) return;
-        auto &intent = World::getComponent<UIIntent>(gs);
-        if (intent.action != UIAction::NextLevel)
-            return;
-
-        // 5) Advance and initialize next wave
-        st.waveIndex += 1;
-        if (st.waveIndex < WAVE_COUNT) {
-            const Wave &w = WAVES[st.waveIndex];
-            st.remaining = w.count;
-            st.timeLeft = 0.f;
-        }
-        intent.action = UIAction::None;
     }
+    if (mgr.id == -1) return;
+    auto &st = World::getComponent<SpawnState>(mgr);
+
+    // 2) If we're mid-spawning this wave, continue countdown + spawn
+    if (st.remaining > 0) {
+        const Wave &w = WAVES[st.waveIndex];
+        st.timeLeft -= DT;
+        if (st.timeLeft <= 0.f) {
+            createCreep(w.speed, w.hp, w.gold, w.sprite);
+            st.remaining -= 1;
+            st.timeLeft = w.delay;
+        }
+        return;
+    }
+
+    // no new wave until current one’s creeps are all gone and player clicked
+    // 3) Ensure no creeps remain alive before allowing next-wave click
+    static const Mask creepMask = MaskBuilder().set<Creep_Tag>().build();
+    for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+        if (World::mask(e).test(creepMask))
+            return;
+    }
+
+    // 4) Handle NextLevel click to start the next wave
+    static const Mask intentMask = MaskBuilder()
+            .set<GameState_Tag>()
+            .set<UIIntent>()
+            .build();
+    ent_type gs{-1};
+    for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+        if (World::mask(e).test(intentMask)) {
+            gs = e;
+            break;
+        }
+    }
+    if (gs.id == -1) return;
+    auto &intent = World::getComponent<UIIntent>(gs);
+    if (intent.action != UIAction::NextLevel)
+        return;
+
+    // 5) Advance and initialize next wave
+    st.waveIndex += 1;
+    if (st.waveIndex < WAVE_COUNT) {
+        const Wave &w = WAVES[st.waveIndex];
+        st.remaining = w.count;
+        st.timeLeft = 0.f;
+
+        // ─────────── update the displayed level ───────────
+        static const Mask lvlMask = MaskBuilder()
+                .set<GameState_Tag>()
+                .set<CurrentLevel>()
+                .build();
+        ent_type levelEntity = findEntity(lvlMask);
+        if (levelEntity.id != -1) {
+            World::getComponent<CurrentLevel>(levelEntity).level = st.waveIndex + 1;
+        }
+    }
+
+    // consume the UI intent
+    intent.action = UIAction::None;
+}
+
 
     void Element::draw_system() const {
         static const Mask mask = MaskBuilder()
@@ -566,18 +682,58 @@ namespace element {
                 nullptr, SDL_FLIP_NONE);
         }
 
-        SDL_RenderPresent(ren);
         print_status_bar();
+        SDL_RenderPresent(ren);
+    }
+
+    void Element::drawScore(int score, float x, float y, float scale /*=1.0f*/) const {
+        std::string s = std::to_string(score);
+        float cx = x;
+        for (char c: s) {
+            // running on the string to create the num
+            int d = c - '0';
+            const SpriteFrame &frame = [&]() {
+                switch (d) {
+                    case 0: return sprite_digit_0;
+                    case 1: return sprite_digit_1;
+                    case 2: return sprite_digit_2;
+                    case 3: return sprite_digit_3;
+                    case 4: return sprite_digit_4;
+                    case 5: return sprite_digit_5;
+                    case 6: return sprite_digit_6;
+                    case 7: return sprite_digit_7;
+                    case 8: return sprite_digit_8;
+                    case 9: return sprite_digit_9;
+                    default: return sprite_digit_0;
+                }
+            }();
+
+
+            SDL_FRect src;
+            src.x = float(frame.x);
+            src.y = float(frame.y);
+            src.w = float(frame.w);
+            src.h = float(frame.h);
+
+
+            SDL_FRect dst;
+            dst.x = cx;
+            dst.y = y;
+            dst.w = frame.w * scale;
+            dst.h = frame.h * scale;
+
+            SDL_RenderTexture(ren, digits, &src, &dst);
+            cx += frame.w * scale; // spacing for next digit
+        }
     }
 
     void Element::print_status_bar() const {
-        // find the player
+        // HP and Gold from player
         static const Mask uiMask = MaskBuilder()
                 .set<Player_Tag>()
                 .set<HP>()
                 .set<Gold>()
                 .build();
-
         ent_type player{-1};
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
             if (World::mask(e).test(uiMask)) {
@@ -586,26 +742,31 @@ namespace element {
             }
         }
         if (player.id == -1) return;
-
-        // fetch current values
         int hp = World::getComponent<HP>(player).current;
         int gold = World::getComponent<Gold>(player).current;
 
-        // remember last printed values
-        static int lastHP = -1;
-        static int lastGold = -1;
+        // Current level from GameState
+        static const Mask lvlMask = MaskBuilder()
+                .set<GameState_Tag>()
+                .set<CurrentLevel>()
+                .build();
+        ent_type gs{-1};
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(lvlMask)) {
+                gs = e;
+                break;
+            }
+        }
+        int level = (gs.id != -1)
+                        ? World::getComponent<CurrentLevel>(gs).level
+                        : 0;
 
-        // only print if something changed
-        if (hp == lastHP && gold == lastGold)
-            return;
-
-        lastHP = hp;
-        lastGold = gold;
-
-        // now print one line and newline
-        std::cout << "HP: " << hp
-                << "   Gold: " << gold
-                << std::endl;
+        // scale for displaying numbers
+        const float scale = 0.4f;
+        // placements of each info
+        drawScore(hp, 800.f, 200.f, scale);
+        drawScore(gold, 950.f, 200.f, scale);
+        drawScore(level, 1200.f, 200.f, scale);
     }
 
     void Element::targeting_system() const {

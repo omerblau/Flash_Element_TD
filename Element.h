@@ -32,6 +32,7 @@ namespace element {
     using Player_Tag = struct {};
     using Mouse_Tag = struct {};
     using UIButton_Tag = struct {};
+    using HUD_Tag = struct {};
     using Arrow_Tag = struct {};
     using Cannon_Tag = struct {};
     using Air_Tag = struct {};
@@ -39,6 +40,8 @@ namespace element {
     using GameState_Tag = struct {};
     using SpawnManager_Tag = struct {};
     using Bullet_Tag = struct {};
+    using CoinIcon_Tag  = struct {};
+    using HealthIcon_Tag= struct {};
 
     class Element {
     public:
@@ -65,6 +68,9 @@ namespace element {
         void createBuyCannon() const;
         void createBuyAir() const;
         void createNextLevelButton() const;
+        void createHealthIcon() const;
+        void createCoinIcon() const;
+        void createHUD() const;
         void createUI() const;
         //game management
         void createMouse() const;
@@ -87,11 +93,16 @@ namespace element {
         void placing_tower_system()     const;
         void wave_system()              const;
         void print_status_bar()         const;
+
+        void createHeaders() const;
+
         void targeting_system()         const;
         void shooting_system()          const;
         void homing_system()            const;
         void bullet_hit_system()        const;
         void draw_system()              const;
+
+        void drawScore(int score, float x, float y, float scale) const;
 
         static constexpr int WIN_WIDTH = 1280;
         static constexpr int WIN_HEIGHT = 800;
@@ -113,10 +124,16 @@ namespace element {
 
         static constexpr SDL_FRect BULLET_TEX           = FRECT(sprite_proj_cannon);
 
+        static constexpr SDL_FRect UI_HEALTH_TEX        = FRECT(sprite_ui_health);
+        static constexpr SDL_FRect UI_MONEY_TEX         = FRECT(sprite_ui_money);
+        static constexpr SDL_FRect UI_LEVEL_TEX         = FRECT(sprite_ui_level);
+
 
         SDL_Window *win = nullptr;
         SDL_Renderer *ren = nullptr;
         SDL_Texture *tex = nullptr;
+        SDL_Texture *digits = nullptr;
+        SDL_Texture *hud = nullptr;
     };  // @formatter:on
 
     // -----------------------------------------------------------------------------

@@ -1,8 +1,7 @@
 /* Auto‑generated from atlas.json – DO NOT EDIT MANUALLY */
 #pragma once
 
-struct SpriteFrame
-{
+struct SpriteFrame {
     const char *name;
     int x, y, w, h;
 };
@@ -87,3 +86,18 @@ inline constexpr SpriteFrame sprite_ui_hp{"ui_hp.png", 103, 0, 10, 14};
 inline constexpr SpriteFrame sprite_ui_next_level{"ui_next_level.png", 0, 185, 62, 52};
 inline constexpr SpriteFrame sprite_ui_start{"ui_start.png", 62, 185, 62, 52};
 inline constexpr SpriteFrame sprite_ui_wood{"ui_wood.png", 113, 0, 15, 18};
+
+inline constexpr SpriteFrame sprite_digit_0{"digits.png", 0, 0, 100, 138}; // 0
+inline constexpr SpriteFrame sprite_digit_1{"digits.png", 405, 138, 91, 138};
+inline constexpr SpriteFrame sprite_digit_2{"digits.png", 100, 0, 100, 138}; // 2
+inline constexpr SpriteFrame sprite_digit_3{"digits.png", 200, 0, 100, 138}; // 3
+inline constexpr SpriteFrame sprite_digit_4{"digits.png", 300, 0, 100, 138}; // 4
+inline constexpr SpriteFrame sprite_digit_5{"digits.png", 400, 0, 100, 138}; // 5
+inline constexpr SpriteFrame sprite_digit_6{"digits.png", 0, 138, 100, 138}; // 6
+inline constexpr SpriteFrame sprite_digit_7{"digits.png", 100, 138, 100, 138}; // 7
+inline constexpr SpriteFrame sprite_digit_8{"digits.png", 200, 138, 100, 138}; // 8
+inline constexpr SpriteFrame sprite_digit_9{"digits.png", 300, 138, 100, 138}; // 9
+
+inline constexpr SpriteFrame sprite_ui_health{"HUD.png", 0, 0, 180, 44}; // Health
+inline constexpr SpriteFrame sprite_ui_money{"HUD.png", 180, 0, 180, 44}; // Money
+inline constexpr SpriteFrame sprite_ui_level{"HUD.png", 360, 0, 130, 44}; // Level
