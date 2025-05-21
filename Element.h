@@ -38,6 +38,7 @@ namespace element {
     using NextLevel_Tag = struct {};
     using GameState_Tag = struct {};
     using SpawnManager_Tag = struct {};
+    using Bullet_Tag = struct {};
 
     class Element {
     public:
@@ -87,6 +88,14 @@ namespace element {
         void placing_tower_system() const;
         void wave_system() const;
         void print_status_bar() const; //helper for draw
+        void targeting_system() const;
+
+        void shooting_system() const;
+
+        void damage_system() const;
+
+        void bullet_hit_system() const;
+
         void draw_system() const;
 
         static constexpr int WIN_WIDTH = 1280;
@@ -117,6 +126,12 @@ namespace element {
         static constexpr SDL_FRect TOWER_TEX_CANNON = {
             sprite_tower_cannon_1.x , sprite_tower_cannon_1.y, sprite_tower_cannon_1.w , sprite_tower_cannon_1.h
         };
+
+
+        static constexpr SDL_FRect BULLET_TEX = {
+            sprite_proj_arrow.x , sprite_proj_arrow.y, sprite_proj_arrow.w , sprite_proj_arrow.h
+        };
+
 
 
         SDL_Window *win = nullptr;
