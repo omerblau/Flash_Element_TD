@@ -7,7 +7,7 @@ struct SpriteFrame {
 };
 
 inline constexpr SpriteFrame sprite_1{"1.png", 316, 25, 52, 32};
-inline constexpr SpriteFrame sprite_2{"2.png", 368, 25, 52, 32};
+inline constexpr SpriteFrame sprite_2{"2.png", 386, 33, 24, 10};
 inline constexpr SpriteFrame sprite_3{"3.png", 420, 25, 52, 32};
 inline constexpr SpriteFrame sprite_4{"4.png", 0, 57, 52, 32};
 inline constexpr SpriteFrame sprite_5{"5.png", 52, 57, 52, 32};
@@ -87,8 +87,8 @@ inline constexpr SpriteFrame sprite_ui_next_level{"ui_next_level.png", 0, 185, 6
 inline constexpr SpriteFrame sprite_ui_start{"ui_start.png", 62, 185, 62, 52};
 inline constexpr SpriteFrame sprite_ui_wood{"ui_wood.png", 113, 0, 15, 18};
 
-inline constexpr SpriteFrame sprite_digit_0{"digits.png", 0, 0, 100, 138}; // 0
-inline constexpr SpriteFrame sprite_digit_1{"digits.png", 405, 138, 91, 138};
+inline constexpr SpriteFrame sprite_digit_0{"digits.png", 0, 0, 100, 134}; // 0
+inline constexpr SpriteFrame sprite_digit_1{"digits.png", 405, 138, 75, 130};
 inline constexpr SpriteFrame sprite_digit_2{"digits.png", 100, 0, 100, 138}; // 2
 inline constexpr SpriteFrame sprite_digit_3{"digits.png", 200, 0, 100, 138}; // 3
 inline constexpr SpriteFrame sprite_digit_4{"digits.png", 300, 0, 100, 138}; // 4

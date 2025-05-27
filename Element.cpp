@@ -1,4 +1,6 @@
 #include "Element.h"
+#include "res/towers.h"
+#include "res/waves.h"
 
 #include <iostream>
 #include <limits>
@@ -24,6 +26,7 @@ namespace element {
     }
 
     constexpr float BULLET_SPEED = 600.f; // px/sec
+    constexpr float WAVE_DELAY = 0.5f;
 
     /// init helpers  // @formatter:off
     bool Element::prepareWindowAndTexture() {
@@ -49,8 +52,6 @@ namespace element {
             return false;
         }
         SDL_DestroySurface(surf);
-
-
 
         SDL_Surface* ds = IMG_Load("res/digits.png");
         if (!ds) {
@@ -128,7 +129,7 @@ namespace element {
     }
     void Element::createCoinIcon() const {
         // pick a spot in screen‐coords:
-        constexpr float X = 1100.f, Y = 226.f;
+        constexpr float X = 1090.f, Y = 60.f;
         SDL_FRect src = FRECT(sprite_ui_coin);
         SDL_FPoint size = { src.w * TEX_SCALE * 1.2f, src.h * TEX_SCALE  * 1.2f};
 
@@ -141,7 +142,7 @@ namespace element {
     }
     void Element::createHealthIcon() const {
         // pick another spot:
-        constexpr float X = 910.f, Y = 226.f;
+        constexpr float X = 875.f, Y = 62.f;
         SDL_FRect src = FRECT(sprite_ui_hp);
         SDL_FPoint size = { src.w * TEX_SCALE * 2.f, src.h * TEX_SCALE* 2.f };
 
@@ -187,27 +188,7 @@ namespace element {
         createHealthIcon();
         // createHUD();
     }
-    void Element::createHeaders() const {
-        {
-            // Health
-            SDL_FRect dstH{ 750.f, 100.f,
-                            UI_HEALTH_TEX.w * TEX_SCALE,
-                            UI_HEALTH_TEX.h * TEX_SCALE };
-            SDL_RenderTexture(ren, hud, &UI_HEALTH_TEX, &dstH);
 
-            // Money
-            SDL_FRect dstM{ 950.f, 100.f,
-                            UI_MONEY_TEX.w * TEX_SCALE,
-                            UI_MONEY_TEX.h * TEX_SCALE };
-            SDL_RenderTexture(ren, hud, &UI_MONEY_TEX, &dstM);
-
-            // Level
-            SDL_FRect dstL{1150.f, 100.f,
-                           UI_LEVEL_TEX.w * TEX_SCALE,
-                           UI_LEVEL_TEX.h * TEX_SCALE};
-            SDL_RenderTexture(ren, hud, &UI_LEVEL_TEX, &dstL);
-        }
-    }
 
     void Element::createMouse() const {
         Entity mouseEntity = Entity::create();
@@ -222,7 +203,7 @@ namespace element {
         Entity playerEntity = Entity::create();
         playerEntity.addAll(
             HP{20, 20},
-            Gold{100},
+            Gold{20},
             Player_Tag{}
         );
     }
@@ -258,18 +239,36 @@ namespace element {
             Creep_Tag{}
         );
     }
-    void Element::createTower(float x, float y, float range, int healthDamage,
+    void Element::createTowerHelper(SDL_FPoint p, TowerTypes type, float range, int damage, int price,
                              float fire_rate, SDL_FRect spriteRect) const {
-        Entity creepEntity = Entity::create();
-        creepEntity.addAll(
-            Transform{{x, y}, 0.f},
+        Entity towerEntity = Entity::create();
+        towerEntity.addAll(
+            TowerType {type},
+            Transform{p, 0.f},
             Drawable{spriteRect, {spriteRect.w * TEX_SCALE, spriteRect.h * TEX_SCALE}},
             Range {range},
-            Damage {healthDamage},
+            Damage {damage},
             FireRate {fire_rate, 0.0f},
-            Target {-1}
+            Target {-1},
+            CurrentLevel {1},
+            Price {price}
         );
     }
+    // @formatter:on
+    void Element::createTower(TowerTypes type, SDL_FPoint p) const {
+        if (type == TowerTypes::Arrow) {
+            createTowerHelper(p, TowerTypes::Arrow, arrow_1.range, arrow_1.damage,
+                              arrow_1.price, arrow_1.fireRate, TOWER_TEX_ARROW);
+        } else if (type == TowerTypes::Cannon) {
+            createTowerHelper(p, TowerTypes::Cannon, cannon_1.range, cannon_1.damage,
+                              cannon_1.price, cannon_1.fireRate, TOWER_TEX_CANNON);
+        } else if (type == TowerTypes::Air) {
+            createTowerHelper(p, TowerTypes::Air, air_1.range, air_1.damage,
+                              air_1.price, air_1.fireRate, TOWER_TEX_AIR);
+        }
+    }
+
+    // @formatter:off
     void Element::createBullet(const SDL_FPoint &src, const SDL_FPoint &dst,
                                int damage, int targetId) const {
         // compute direction & travel time
@@ -305,8 +304,6 @@ namespace element {
     void Element::input_system() const {
         static const Mask mouseMask = MaskBuilder()
                 .set<Mouse_Tag>()
-                .set<MouseInput>()
-                .set<Transform>()
                 .build();
 
         auto mouseEnt = findEntity(mouseMask);
@@ -340,22 +337,16 @@ namespace element {
 
     void Element::ui_system() const {
         // 1) Read the one & only MouseInput entity
-        static const Mask mouseMask = MaskBuilder()
-                .set<Mouse_Tag>()
-                .set<MouseInput>()
-                .set<Transform>()
-                .build();
+        static const Mask mouseMask = MaskBuilder().set<Mouse_Tag>().build();
 
         ent_type mouseEnt = findEntity(mouseMask);
         if (mouseEnt.id == -1) return;
+
         const auto &mi = World::getComponent<MouseInput>(mouseEnt);
         if (!mi.clicked) return; // only respond to an actual click
 
-        // 2) Grab the single GameState (where UIIntent lives)
-        static const Mask intentMask = MaskBuilder()
-                .set<GameState_Tag>() // I assume this is your GameState tag
-                .set<UIIntent>()
-                .build();
+        // 2) Grab the single GameState
+        static const Mask intentMask = MaskBuilder().set<GameState_Tag>().build();
 
         ent_type gs = findEntity(intentMask);
         if (gs.id == -1) return;
@@ -365,11 +356,7 @@ namespace element {
             intent.action = UIAction::None; // reset before setting a new one
 
         // 3) Hit‐test every UIButton_Tag
-        static const Mask btnMask = MaskBuilder()
-                .set<UIButton_Tag>()
-                .set<Transform>()
-                .set<Drawable>()
-                .build();
+        static const Mask btnMask = MaskBuilder().set<UIButton_Tag>().build();
 
         for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
             if (!World::mask(b).test(btnMask))
@@ -471,16 +458,9 @@ namespace element {
     }
 
     void Element::placing_tower_system() const {
-        static const Mask mouseMask = MaskBuilder()
-                .set<Mouse_Tag>()
-                .set<MouseInput>()
-                .set<Transform>()
-                .set<Drawable>()
-                .build();
-        static const Mask intentMask = MaskBuilder()
-                .set<GameState_Tag>()
-                .set<UIIntent>()
-                .build();
+        static const Mask mouseMask = MaskBuilder().set<Mouse_Tag>().build();
+        static const Mask intentMask = MaskBuilder().set<GameState_Tag>().build();
+        static const Mask playerMask = MaskBuilder().set<Player_Tag>().build();
 
         // 1) Find mouse entity and UIIntent
         ent_type mouseEnt = findEntity(mouseMask);
@@ -491,6 +471,10 @@ namespace element {
         ent_type gs = findEntity(intentMask);
         if (gs.id == -1) return;
         auto &intent = World::getComponent<UIIntent>(gs);
+
+        ent_type playerEnt = findEntity(playerMask);
+        if (playerEnt.id == -1) return;
+        auto &playerGold = World::getComponent<Gold>(playerEnt);
 
         // 2) If no buy-intent, clear any ghost sprite and bail
         if (intent.action == UIAction::None) {
@@ -512,24 +496,27 @@ namespace element {
         // 5) On click, place real tower if inside map bounds
         if (mi.clicked) {
             float mx = mi.x, my = mi.y;
+            SDL_FPoint p = {mx, my};
             // map rectangle in screen coords:
             float mapLeft = MAP_TEX_PAD_X;
             float mapRight = MAP_TEX_PAD_X + MAP_TEX.w * TEX_SCALE;
             float mapTop = MAP_TEX_PAD_Y;
             float mapBottom = MAP_TEX_PAD_Y + MAP_TEX.h * TEX_SCALE;
 
-
             if (mx >= mapLeft && mx <= mapRight && my >= mapTop && my <= mapBottom) {
                 if (intent.action == UIAction::BuyArrow) {
-                    createTower(mx, my, 200, 6, 0.5, spriteRect);
+                    createTower(TowerTypes::Arrow, p);
+                    playerGold.current -= arrow_1.price;
                 } else if (intent.action == UIAction::BuyCannon) {
-                    createTower(mx, my, 100, 10, 2, spriteRect);
+                    createTower(TowerTypes::Cannon, p);
+                    playerGold.current -= cannon_1.price;
+
                 } else if (intent.action == UIAction::BuyAir) {
-                    createTower(mx, my, 400, 3, 0.1, spriteRect);
+                    createTower(TowerTypes::Air, p);
+                    playerGold.current -= air_1.price;
                 }
 
                 intent.action = UIAction::None;
-                // clear ghost
                 mouseD.part = SDL_FRect{};
             }
         }
@@ -580,81 +567,78 @@ namespace element {
         }
     }
 
-void Element::wave_system() const {
-    // 1) Find SpawnManager singleton
-    static const Mask mgrMask = MaskBuilder()
-            .set<SpawnManager_Tag>()
-            .set<SpawnState>()
-            .build();
-    ent_type mgr{-1};
-    for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-        if (World::mask(e).test(mgrMask)) {
-            mgr = e;
-            break;
-        }
-    }
-    if (mgr.id == -1) return;
-    auto &st = World::getComponent<SpawnState>(mgr);
-
-    // 2) If we're mid-spawning this wave, continue countdown + spawn
-    if (st.remaining > 0) {
-        const Wave &w = WAVES[st.waveIndex];
-        st.timeLeft -= DT;
-        if (st.timeLeft <= 0.f) {
-            createCreep(w.speed, w.hp, w.gold, w.sprite);
-            st.remaining -= 1;
-            st.timeLeft = w.delay;
-        }
-        return;
-    }
-
-    // no new wave until current one’s creeps are all gone and player clicked
-    // 3) Ensure no creeps remain alive before allowing next-wave click
-    static const Mask creepMask = MaskBuilder().set<Creep_Tag>().build();
-    for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-        if (World::mask(e).test(creepMask))
-            return;
-    }
-
-    // 4) Handle NextLevel click to start the next wave
-    static const Mask intentMask = MaskBuilder()
-            .set<GameState_Tag>()
-            .set<UIIntent>()
-            .build();
-    ent_type gs{-1};
-    for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
-        if (World::mask(e).test(intentMask)) {
-            gs = e;
-            break;
-        }
-    }
-    if (gs.id == -1) return;
-    auto &intent = World::getComponent<UIIntent>(gs);
-    if (intent.action != UIAction::NextLevel)
-        return;
-
-    // 5) Advance and initialize next wave
-    st.waveIndex += 1;
-    if (st.waveIndex < WAVE_COUNT) {
-        const Wave &w = WAVES[st.waveIndex];
-        st.remaining = w.count;
-        st.timeLeft = 0.f;
-
-        // ─────────── update the displayed level ───────────
-        static const Mask lvlMask = MaskBuilder()
-                .set<GameState_Tag>()
-                .set<CurrentLevel>()
+    void Element::wave_system() const {
+        // 1) Find SpawnManager singleton
+        static const Mask mgrMask = MaskBuilder()
+                .set<SpawnManager_Tag>()
+                .set<SpawnState>()
                 .build();
-        ent_type levelEntity = findEntity(lvlMask);
-        if (levelEntity.id != -1) {
-            World::getComponent<CurrentLevel>(levelEntity).level = st.waveIndex + 1;
+        ent_type mgr{-1};
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(mgrMask)) {
+                mgr = e;
+                break;
+            }
         }
+        if (mgr.id == -1) return;
+        auto &st = World::getComponent<SpawnState>(mgr);
+
+        // 2) If we're mid-spawning this wave, continue countdown + spawn
+        if (st.remaining > 0) {
+            const Wave &w = WAVES[st.waveIndex];
+            st.timeLeft -= DT;
+            if (st.timeLeft <= 0.f) {
+                createCreep(w.speed, w.hp, w.goldBounty, w.sprite);
+                st.remaining -= 1;
+                st.timeLeft = WAVE_DELAY;
+            }
+            return;
+        }
+
+        // no new wave until current one’s creeps are all gone and player clicked
+        // 3) Ensure no creeps remain alive before allowing next-wave click
+        static const Mask creepMask = MaskBuilder().set<Creep_Tag>().build();
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(creepMask))
+                return;
+        }
+
+        // 4) Handle NextLevel click to start the next wave
+        static const Mask intentMask = MaskBuilder()
+                .set<GameState_Tag>()
+                .build();
+        ent_type gs{-1};
+        for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
+            if (World::mask(e).test(intentMask)) {
+                gs = e;
+                break;
+            }
+        }
+        if (gs.id == -1) return;
+        auto &intent = World::getComponent<UIIntent>(gs);
+        if (intent.action != UIAction::NextLevel)
+            return;
+
+        // 5) Advance and initialize next wave
+        st.waveIndex += 1;
+        if (st.waveIndex < WAVE_COUNT) {
+            const Wave &w = WAVES[st.waveIndex];
+            st.remaining = w.count;
+            st.timeLeft = 0.f;
+
+            // ─────────── update the displayed level ───────────
+            static const Mask lvlMask = MaskBuilder()
+                    .set<GameState_Tag>()
+                    .build();
+            ent_type levelEntity = findEntity(lvlMask);
+            if (levelEntity.id != -1) {
+                World::getComponent<CurrentLevel>(levelEntity).level = st.waveIndex + 1;
+            }
+        }
+
+        // consume the UI intent
+        intent.action = UIAction::None;
     }
-
-    // consume the UI intent
-    intent.action = UIAction::None;
-}
-
 
     void Element::draw_system() const {
         static const Mask mask = MaskBuilder()
@@ -686,11 +670,36 @@ void Element::wave_system() const {
         SDL_RenderPresent(ren);
     }
 
-    void Element::drawScore(int score, float x, float y, float scale /*=1.0f*/) const {
+    void Element::drawScoreHelper(int score, float right_x, float y, float scale) const {
         std::string s = std::to_string(score);
-        float cx = x;
+
+        // 1) Compute total width of all digits:
+        float totalW = 0.f;
         for (char c: s) {
-            // running on the string to create the num
+            int d = c - '0';
+            const SpriteFrame &f = [&]() {
+                switch (d) {
+                    case 0: return sprite_digit_0;
+                    case 1: return sprite_digit_1;
+                    case 2: return sprite_digit_2;
+                    case 3: return sprite_digit_3;
+                    case 4: return sprite_digit_4;
+                    case 5: return sprite_digit_5;
+                    case 6: return sprite_digit_6;
+                    case 7: return sprite_digit_7;
+                    case 8: return sprite_digit_8;
+                    case 9: return sprite_digit_9;
+                    default: return sprite_digit_0;
+                }
+            }();
+            totalW += f.w * scale * TEX_SCALE;
+        }
+
+        // 2) Start drawing at right-aligned origin:
+        float cx = right_x - totalW;
+
+        // 3) Draw each digit left-to-right:
+        for (char c: s) {
             int d = c - '0';
             const SpriteFrame &frame = [&]() {
                 switch (d) {
@@ -708,22 +717,11 @@ void Element::wave_system() const {
                 }
             }();
 
-
-            SDL_FRect src;
-            src.x = float(frame.x);
-            src.y = float(frame.y);
-            src.w = float(frame.w);
-            src.h = float(frame.h);
-
-
-            SDL_FRect dst;
-            dst.x = cx;
-            dst.y = y;
-            dst.w = frame.w * scale;
-            dst.h = frame.h * scale;
+            SDL_FRect src{float(frame.x), float(frame.y), float(frame.w), float(frame.h)};
+            SDL_FRect dst{cx, y, frame.w * scale * TEX_SCALE, frame.h * scale * TEX_SCALE};
 
             SDL_RenderTexture(ren, digits, &src, &dst);
-            cx += frame.w * scale; // spacing for next digit
+            cx += frame.w * scale * TEX_SCALE;
         }
     }
 
@@ -748,7 +746,6 @@ void Element::wave_system() const {
         // Current level from GameState
         static const Mask lvlMask = MaskBuilder()
                 .set<GameState_Tag>()
-                .set<CurrentLevel>()
                 .build();
         ent_type gs{-1};
         for (ent_type e{0}; e.id <= World::maxId().id; ++e.id) {
@@ -762,11 +759,11 @@ void Element::wave_system() const {
                         : 0;
 
         // scale for displaying numbers
-        const float scale = 0.4f;
+        const float scale = 0.25f;
         // placements of each info
-        drawScore(hp, 800.f, 200.f, scale);
-        drawScore(gold, 950.f, 200.f, scale);
-        drawScore(level, 1200.f, 200.f, scale);
+        drawScoreHelper(hp, 850.f, 30.f, scale);
+        drawScoreHelper(gold, 1060.f, 30.f, scale);
+        drawScoreHelper(level, 1200.f, 30.f, scale);
     }
 
     void Element::targeting_system() const {
@@ -953,6 +950,15 @@ void Element::wave_system() const {
                 .set<HP>()
                 .build();
 
+        static const Mask playerMask = MaskBuilder()
+                .set<Player_Tag>()
+                .set<HP>()
+                .set<Gold>()
+                .build();
+
+        static ent_type player = findEntity(playerMask);
+        if (player.id == -1) return; // no player found? bail'
+
         for (ent_type b{0}; b.id <= World::maxId().id; ++b.id) {
             if (!World::mask(b).test(mask))
                 continue;
@@ -968,8 +974,11 @@ void Element::wave_system() const {
             if (World::mask(creep).test(creepMask)) {
                 auto &hp = World::getComponent<HP>(creep);
                 hp.current -= World::getComponent<Damage>(b).value;
-                if (hp.current <= 0)
+                if (hp.current <= 0) {
+                    auto &gold = World::getComponent<Gold>(player);
+                    gold.current += World::getComponent<Gold_Bounty>(creep).value;
                     World::destroyEntity(creep);
+                }
             }
             World::destroyEntity(b);
         }

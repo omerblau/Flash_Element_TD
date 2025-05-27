@@ -1,14 +1,18 @@
 #pragma once
 #include <SDL3/SDL.h>
 #include "res/atlas.h"
+#include "res/waves.h"
 
 #define FRECT(s) SDL_FRect{ (s).x, (s).y, (s).w, (s).h }
 
 // @formatter:off
 namespace element {
     enum class UIAction {None, BuyArrow, BuyCannon, BuyAir, NextLevel};
+    enum class TowerTypes {Arrow, Cannon, Air};
 
     /// components
+    using TowerType = struct {TowerTypes type;};
+    using Price = struct {int price;};
     using Transform = struct {SDL_FPoint p; float a;};
     using Drawable = struct {SDL_FRect part; SDL_FPoint size;};
     using Gold = struct {int current;};
@@ -21,11 +25,13 @@ namespace element {
     using SpawnState = struct {int waveIndex; int remaining; float timeLeft;};
     using MouseInput = struct {int x; int y; bool clicked;};
     using UIIntent = struct {UIAction action = UIAction::None;};
-    using Range = struct {float value;};
     using Damage = struct {int value;};
-    using FireRate = struct {float interval; float timeLeft;};
+    using Range = struct {float value;};
     using Target = struct {int id;};
     using TravelTime = struct {float travelTime;};
+    //tower only
+    using FireRate = struct {float interval; float timeLeft;};
+
 
     /// Tags
     using Creep_Tag = struct {};
@@ -54,10 +60,6 @@ namespace element {
         static constexpr float MAP_TEX_PAD_Y = 20.0f;
         static constexpr float TEX_SCALE = 1.8f;
 
-        static constexpr SDL_FRect SHEEP_TEX = {
-            sprite_1.x + 5, sprite_1.y, sprite_1.w, sprite_1.h};
-        static constexpr SDL_FRect RABID_TEX = {
-            sprite_2.x + 5, sprite_2.y+5, sprite_2.w, sprite_2.h};
 
     private:
         /// init helpers
@@ -72,15 +74,18 @@ namespace element {
         void createCoinIcon() const;
         void createHUD() const;
         void createUI() const;
+
         //game management
         void createMouse() const;
         void createPlayer() const;
         void createGameState() const;
         void createSpawnManager() const;
+
         //factories
         void createCreep(float speed, int hp, int goldBounty, SDL_FRect spriteRect) const;
-        void createTower(float x, float y, float range, int healthDamage,
+        void createTowerHelper(SDL_FPoint p, TowerTypes type, float range, int damage, int price,
                              float fire_rate, SDL_FRect spriteRect) const;
+        void createTower(TowerTypes type, SDL_FPoint p) const;
         void createBullet(const SDL_FPoint &src, const SDL_FPoint &dst,
                                 int damage, int targetId) const;
 
@@ -102,7 +107,7 @@ namespace element {
         void bullet_hit_system()        const;
         void draw_system()              const;
 
-        void drawScore(int score, float x, float y, float scale) const;
+        void drawScoreHelper(int score, float x, float y, float scale) const;
 
         static constexpr int WIN_WIDTH = 1280;
         static constexpr int WIN_HEIGHT = 800;
@@ -176,20 +181,4 @@ namespace element {
     // (end waypoint helpers)
     // -----------------------------------------------------------------------------
 
-
-    /// Wave config (static data, not ECS components)
-    struct Wave {
-        int count; // how many to spawn
-        float delay; // seconds between spawns
-        float speed; // movement speed
-        int hp; // hit points
-        int gold; // bounty
-        SDL_FRect sprite; // source rect in your atlas
-    };
-
-    static constexpr Wave WAVES[] = {
-        {10, 0.5f, 100.f, 10, 1, Element::SHEEP_TEX},
-        {20, 0.5f, 120.f, 20, 3, Element::RABID_TEX}
-    };
-    static constexpr int WAVE_COUNT = sizeof(WAVES) / sizeof(WAVES[0]);
 }

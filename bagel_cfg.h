@@ -13,10 +13,10 @@ constexpr Bagel Params {
 };
 
 // — sparse storage
-BAGEL_STORAGE(element::UIIntent,     SparseStorage)
-BAGEL_STORAGE(element::MouseInput,   SparseStorage)
-BAGEL_STORAGE(element::CurrentLevel, SparseStorage)
-BAGEL_STORAGE(element::SpawnState,   SparseStorage)
+BAGEL_STORAGE(element::UIIntent,      SparseStorage)
+BAGEL_STORAGE(element::MouseInput,    SparseStorage)
+BAGEL_STORAGE(element::CurrentLevel,  SparseStorage)
+BAGEL_STORAGE(element::SpawnState,    SparseStorage)
 
 // — packed storage
 BAGEL_STORAGE(element::Transform,     PackedStorage)
